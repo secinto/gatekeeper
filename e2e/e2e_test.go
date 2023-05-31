@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cenkalti/backoff"
+	backoff "github.com/cenkalti/backoff/v4"
 	resty "github.com/go-resty/resty/v2"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy"
 	"github.com/gogatekeeper/gatekeeper/pkg/testsuite"
@@ -28,40 +28,6 @@ const (
 )
 
 func TestMain(m *testing.M) {
-	retry := 0
-
-	operation := func() error {
-		var err error
-
-		if retry > 0 {
-			fmt.Printf("Retrying connection to keycloak instance %d", retry)
-		}
-
-		client := resty.New()
-		request := client.R()
-		resp, err := request.Execute("GET", "http://localhost:8081")
-
-		status := resp.StatusCode()
-
-		if status != 200 {
-			retry++
-			return err
-		}
-
-		return nil
-	}
-
-	backOff := backoff.NewExponentialBackOff()
-	backOff.MaxElapsedTime = time.Second * 300
-	err := backoff.Retry(operation, backOff)
-
-	if err != nil {
-		fmt.Print("Failed to connect to keycloak instance, aborting!")
-		os.Exit(1)
-	}
-
-	time.Sleep(30 * time.Second)
-
 	code := m.Run()
 	os.Exit(code)
 }
@@ -82,6 +48,7 @@ func TestE2E(t *testing.T) {
 	os.Setenv("PROXY_NO_REDIRECTS", "true")
 	os.Setenv("PROXY_SKIP_ACCESS_TOKEN_CLIENT_ID_CHECK", "true")
 	os.Setenv("PROXY_SKIP_ACCESS_TOKEN_ISSUER_CHECK", "true")
+	os.Setenv("PROXY_OPENID_PROVIDER_RETRY_COUNT", "10")
 
 	go func() {
 		app := proxy.NewOauthProxyApp()
@@ -93,22 +60,6 @@ func TestE2E(t *testing.T) {
 			os.Exit(1)
 		}
 	}()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	conf := &clientcredentials.Config{
-		ClientID:     testClient,
-		ClientSecret: testClientSecret,
-		Scopes:       []string{"email", "openid"},
-		TokenURL:     "http://localhost:8081/realms/" + testRealm + "/protocol/openid-connect/token",
-	}
-
-	respToken, err := conf.Token(ctx)
-
-	if err != nil {
-		t.Fatalf("Failed to acquire access token for client")
-	}
 
 	retry := 0
 
@@ -130,11 +81,27 @@ func TestE2E(t *testing.T) {
 
 	backOff := backoff.NewExponentialBackOff()
 	backOff.MaxElapsedTime = time.Second * 300
-	err = backoff.Retry(operation, backOff)
+	err := backoff.Retry(operation, backOff)
 
 	if err != nil {
 		fmt.Print("Failed to connect to proxy instance, aborting!")
 		os.Exit(1)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	conf := &clientcredentials.Config{
+		ClientID:     testClient,
+		ClientSecret: testClientSecret,
+		Scopes:       []string{"email", "openid"},
+		TokenURL:     "http://localhost:8081/realms/" + testRealm + "/protocol/openid-connect/token",
+	}
+
+	respToken, err := conf.Token(ctx)
+
+	if err != nil {
+		t.Fatalf("Failed to acquire access token for client")
 	}
 
 	client := resty.New()

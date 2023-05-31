@@ -41,6 +41,7 @@ import (
 
 	"github.com/Nerzal/gocloak/v12"
 	proxyproto "github.com/armon/go-proxyproto"
+	backoff "github.com/cenkalti/backoff/v4"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/elazarl/goproxy"
 	"github.com/go-chi/chi/v5"
@@ -1052,7 +1053,30 @@ func (r *OauthProxy) NewOpenIDProvider() (*oidc3.Provider, *gocloak.GoCloak, err
 	// see https://github.com/coreos/go-oidc/issues/214
 	// see https://github.com/coreos/go-oidc/pull/260
 	ctx := oidc3.ClientContext(context.Background(), restyClient.GetClient())
-	provider, err := oidc3.NewProvider(ctx, r.Config.DiscoveryURL)
+	var provider *oidc3.Provider
+	var err error
+
+	operation := func() error {
+		provider, err = oidc3.NewProvider(ctx, r.Config.DiscoveryURL)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	notify := func(err error, delay time.Duration) {
+		r.Log.Warn(
+			"problem retrieving oidc config",
+			zap.Error(err),
+			zap.Duration("retry after", delay),
+		)
+	}
+
+	bo := backoff.WithMaxRetries(
+		backoff.NewExponentialBackOff(),
+		uint64(r.Config.OpenIDProviderRetryCount),
+	)
+	err = backoff.RetryNotify(operation, bo, notify)
 
 	if err != nil {
 		return nil,
