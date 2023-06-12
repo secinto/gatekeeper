@@ -1022,6 +1022,34 @@ func (r *OauthProxy) createTemplates() error {
 	return nil
 }
 
+type OpenIDRoundTripper struct {
+	http.Header
+	rt http.RoundTripper
+}
+
+var _ http.RoundTripper = OpenIDRoundTripper{}
+
+func NewOpenIDRoundTripper(rt http.RoundTripper) OpenIDRoundTripper {
+	if rt == nil {
+		rt = http.DefaultTransport
+	}
+
+	return OpenIDRoundTripper{Header: make(http.Header), rt: rt}
+}
+
+func (r OpenIDRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if len(r.Header) == 0 {
+		return r.rt.RoundTrip(req)
+	}
+
+	req = req.Clone(req.Context())
+	for k, v := range r.Header {
+		req.Header[k] = v
+	}
+
+	return r.rt.RoundTrip(req)
+}
+
 // newOpenIDProvider initializes the openID configuration, note: the redirection url is deliberately left blank
 // in order to retrieve it from the host header on request
 func (r *OauthProxy) NewOpenIDProvider() (*oidc3.Provider, *gocloak.GoCloak, error) {
@@ -1038,7 +1066,6 @@ func (r *OauthProxy) NewOpenIDProvider() (*oidc3.Provider, *gocloak.GoCloak, err
 	}
 
 	restyClient := client.RestyClient()
-	restyClient.SetDebug(r.Config.Verbose)
 	restyClient.SetTimeout(r.Config.OpenIDProviderTimeout)
 	restyClient.SetTLSClientConfig(
 		&tls.Config{
@@ -1049,6 +1076,15 @@ func (r *OauthProxy) NewOpenIDProvider() (*oidc3.Provider, *gocloak.GoCloak, err
 	if r.Config.OpenIDProviderProxy != "" {
 		restyClient.SetProxy(r.Config.OpenIDProviderProxy)
 	}
+
+	httpCl := restyClient.GetClient()
+	// This is not nice but currently go-oidc package doesnt provide way to set custom headers
+	// https://github.com/coreos/go-oidc/issues/382
+	openIDRt := NewOpenIDRoundTripper(httpCl.Transport)
+	for k, v := range r.Config.OpenIDProviderHeaders {
+		openIDRt.Set(k, v)
+	}
+	httpCl.Transport = openIDRt
 
 	// see https://github.com/coreos/go-oidc/issues/214
 	// see https://github.com/coreos/go-oidc/pull/260
