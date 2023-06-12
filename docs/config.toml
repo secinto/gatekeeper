@@ -5,6 +5,12 @@ title = "Gatekeeper"
 theme = "hugo-theme-learn"
 
 [markup]
+  [markup.asciidocExt]
+    backend = 'html5'
+    extensions = []
+    failureLevel = 'fatal'
+    noHeaderOrFooter = true
+    preserveTOC = true
   [markup.goldmark]
     [markup.goldmark.extensions]
       definitionList = true
@@ -22,6 +28,10 @@ theme = "hugo-theme-learn"
       hardWraps = false
       unsafe = false
       xhtml = false
+  [markup.tableOfContents]
+    endLevel = 4
+    ordered = false
+    startLevel = 2
 
 # For search functionality
 [outputs]
@@ -40,6 +50,7 @@ description = "Gatekeeper's homepage"
 showVisitedLinks = false
 # Disable search function. It will hide search bar
 disableSearch = false
+disableToc = false
 # Javascript and CSS cache are automatically busted when new version of site is generated.
 # Set this to true to disable this behavior (some proxies don't handle well this optimization)
 disableAssetsBusting = false
