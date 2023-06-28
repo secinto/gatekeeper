@@ -131,6 +131,7 @@ func TestExternalOpa(t *testing.T) {
 			AuthzPolicy:    ``,
 			StartOpa:       true,
 			ExpectedResult: DeniedAuthz,
+			ExptectError:   true,
 		},
 		{
 			Name: "OpaServerNotStarted",
