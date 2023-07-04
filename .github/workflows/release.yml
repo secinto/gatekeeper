@@ -41,10 +41,6 @@ jobs:
       # Cleans up unreachable Git objects and convert a shallow clone to a regular one if needed
       - name: Unshallow
         run: git fetch --prune --unshallow
-      # Run tests prior to release
-      - name: Test
-        run: |
-          go test -v -race $(go list ./... | grep -v e2e) ./...
       # Publish the binaries
       - name: Import GPG key
         id: import_gpg
@@ -58,11 +54,11 @@ jobs:
           cluster-name: "testcluster"
           args: >-
             -p "8081:80@loadbalancer"
-      - name: "Run E2E tests"
+      - name: "Run Tests"
         run: |
           k3d kubeconfig merge testcluster --kubeconfig-switch-context
           KUBECONFIG=~/.k3d/kubeconfig-testcluster.yaml kubectl apply -f ./e2e/k8s/manifest.yml
-          go test -v $(go list ./... | grep e2e) ./e2e
+          go test -v -race ./...
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v3
         with:

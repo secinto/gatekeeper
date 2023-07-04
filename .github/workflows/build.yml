@@ -30,15 +30,11 @@ jobs:
           cluster-name: "testcluster"
           args: >-
             -p "8081:80@loadbalancer"
-      - name: "Run E2E tests"
+      - name: "Run Tests"
         run: |
           k3d kubeconfig merge testcluster --kubeconfig-switch-context
           KUBECONFIG=~/.k3d/kubeconfig-testcluster.yaml kubectl apply -f ./e2e/k8s/manifest.yml
-          go test $(go list ./... | grep e2e)
-      # Run tests and generates a coverage profile
-      - name: Test
-        run: |
-          go test -v -race $(go list ./... | grep -v e2e) -coverprofile=profile.cov ./...
+          go test -v -race -coverprofile=profile.cov ./...
       # Run Go benchmarks
       - name: Benchmark
         run: |
