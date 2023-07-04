@@ -1,10 +1,12 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math/rand"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"time"
@@ -12,6 +14,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/PuerkitoBio/goquery"
 	resty "github.com/go-resty/resty/v2"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy"
@@ -25,6 +28,8 @@ const (
 	testClientSecret = "6447d0c0-d510-42a7-b654-6e3a16b2d7e2"
 	timeout          = time.Second * 300
 	idpURI           = "http://localhost:8081"
+	testUser         = "myuser"
+	testPass         = "baba1234"
 )
 
 var idpRealmURI = fmt.Sprintf("%s/realms/%s", idpURI, testRealm)
@@ -34,6 +39,23 @@ func generateRandomPort() string {
 	min := 1024
 	max := 65000
 	return fmt.Sprintf("%d", rand.Intn(max-min+1)+min)
+}
+
+func startAndWait(portNum string, osArgs []string) {
+	go func() {
+		defer GinkgoRecover()
+		app := proxy.NewOauthProxyApp()
+		Expect(app.Run(osArgs)).To(Succeed())
+	}()
+
+	Eventually(func(g Gomega) error {
+		conn, err := net.Dial("tcp", ":"+portNum)
+		if err != nil {
+			return err
+		}
+		conn.Close()
+		return nil
+	}, timeout, 15*time.Second).Should(Succeed())
 }
 
 var _ = Describe("NoRedirects Simple login/logout", func() {
@@ -56,21 +78,8 @@ var _ = Describe("NoRedirects Simple login/logout", func() {
 		os.Setenv("PROXY_SKIP_ACCESS_TOKEN_ISSUER_CHECK", "true")
 		os.Setenv("PROXY_OPENID_PROVIDER_RETRY_COUNT", "30")
 
-		go func() {
-			defer GinkgoRecover()
-			app := proxy.NewOauthProxyApp()
-			os.Args = []string{os.Args[0]}
-			Expect(app.Run(os.Args)).To(Succeed())
-		}()
-
-		Eventually(func(g Gomega) error {
-			conn, err := net.Dial("tcp", ":"+portNum)
-			if err != nil {
-				return err
-			}
-			conn.Close()
-			return nil
-		}, timeout, 15*time.Second).Should(Succeed())
+		osArgs := []string{os.Args[0]}
+		startAndWait(portNum, osArgs)
 	})
 
 	It("should login with service account and logout successfully", func(ctx context.Context) {
@@ -85,13 +94,73 @@ var _ = Describe("NoRedirects Simple login/logout", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		request := resty.New().SetRedirectPolicy(resty.NoRedirectPolicy()).R().SetAuthToken(respToken.AccessToken)
-		resp, err := request.Execute("GET", proxyAddress)
+		resp, err := request.Get(proxyAddress)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.StatusCode()).To(Equal(200))
+		Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 
 		request = resty.New().R().SetAuthToken(respToken.AccessToken)
-		resp, err = request.Execute("GET", proxyAddress+"/oauth/logout")
+		resp, err = request.Get(proxyAddress + "/oauth/logout")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(resp.StatusCode()).To(Equal(200))
+		Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+	})
+})
+
+var _ = Describe("Code Flow Simple login/logout", func() {
+	var portNum string
+	var proxyAddress string
+
+	BeforeEach(func() {
+		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
+		portNum = generateRandomPort()
+		proxyAddress = "http://localhost:" + portNum
+
+		os.Setenv("PROXY_DISCOVERY_URL", idpRealmURI)
+		os.Setenv("PROXY_OPENID_PROVIDER_TIMEOUT", "120s")
+		os.Setenv("PROXY_LISTEN", "0.0.0.0:"+portNum)
+		os.Setenv("PROXY_CLIENT_ID", testClient)
+		os.Setenv("PROXY_CLIENT_SECRET", testClientSecret)
+		os.Setenv("PROXY_UPSTREAM_URL", server.URL)
+		os.Setenv("PROXY_NO_REDIRECTS", "false")
+		os.Setenv("PROXY_SKIP_ACCESS_TOKEN_CLIENT_ID_CHECK", "true")
+		os.Setenv("PROXY_SKIP_ACCESS_TOKEN_ISSUER_CHECK", "true")
+		os.Setenv("PROXY_OPENID_PROVIDER_RETRY_COUNT", "30")
+		os.Setenv("PROXY_SECURE_COOKIE", "false")
+
+		osArgs := []string{os.Args[0]}
+		startAndWait(portNum, osArgs)
+	})
+
+	It("should login with user/password and logout successfully", func(ctx context.Context) {
+		rClient := resty.New().SetRedirectPolicy(resty.FlexibleRedirectPolicy(5))
+		resp, err := rClient.R().Get(proxyAddress)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+
+		doc, err := goquery.NewDocumentFromReader(bytes.NewReader(resp.Body()))
+		Expect(err).NotTo(HaveOccurred())
+
+		selection := doc.Find("#kc-form-login")
+		Expect(selection).ToNot(BeNil())
+
+		selection.Each(func(i int, s *goquery.Selection) {
+			action, exists := s.Attr("action")
+			Expect(exists).To(BeTrue())
+
+			rClient.FormData.Add("username", testUser)
+			rClient.FormData.Add("password", testPass)
+			resp, err = rClient.R().Post(action)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+			Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
+		})
+
+		resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+
+		rClient.SetRedirectPolicy(resty.NoRedirectPolicy())
+		resp, err = rClient.R().Get(proxyAddress)
+		Expect(resp.StatusCode()).To(Equal(http.StatusSeeOther))
 	})
 })
