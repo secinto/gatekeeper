@@ -25,12 +25,12 @@ golang:
 build: golang
 	@echo "--> Compiling the project"
 	@mkdir -p bin
-	go build -ldflags "${LFLAGS}" -o bin/${NAME}
+	go build -ldflags "${LFLAGS}" -o bin/${NAME} cmd/gatekeeper-keycloak.go
 
 static: golang
 	@echo "--> Compiling the project statically"
 	@mkdir -p bin
-	CGO_ENABLED=0 GOOS=linux go build -a -tags netgo -ldflags "-s -w ${LFLAGS}" -o bin/${NAME}
+	CGO_ENABLED=0 GOOS=linux go build -a -tags netgo -ldflags "-s -w ${LFLAGS}" -o bin/${NAME} cmd/gatekeeper-keycloak.go
 
 .PHONY: container-build docker-build
 container-build: docker-build
