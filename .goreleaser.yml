@@ -17,6 +17,8 @@ builds:
     # Adds some metadata to the build like version, commit reference and the date of the build
     ldflags:
       - -s -w -X "github.com/gogatekeeper/gatekeeper/pkg/proxy.release={{.Version}}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy.gitsha={{ .FullCommit }}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy.compiled={{ .Timestamp }}"
+    main: ./cmd/gatekeeper-keycloak.go
+    binary: gatekeeper
 
   - id: linux
     goos: [linux]
@@ -33,6 +35,8 @@ builds:
     # Adds some metadata to the build like version, commit reference and the date of the build
     ldflags:
       - -s -w -X "github.com/gogatekeeper/gatekeeper/pkg/proxy.release={{.Version}}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy.gitsha={{ .FullCommit }}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy.compiled={{ .Timestamp }}"
+    main: ./cmd/gatekeeper-keycloak.go
+    binary: gatekeeper
 
   - id: windows
     goos: [windows]
@@ -43,6 +47,8 @@ builds:
     # Adds some metadata to the build like version, commit reference and the date of the build
     ldflags:
       - -s -w -X "github.com/gogatekeeper/gatekeeper/pkg/proxy.release={{.Version}}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy.gitsha={{ .FullCommit }}" -X "github.com/gogatekeeper/gatekeeper/pkg/proxy.compiled={{ .Timestamp }}"
+    main: ./cmd/gatekeeper-keycloak.go
+    binary: gatekeeper
 
 signs:
   - artifacts: checksum
