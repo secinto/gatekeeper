@@ -404,6 +404,97 @@ data:
             "offline_access",
             "microprofile-jwt"
           ]
+        },
+        {
+          "clientId": "test-client-pkce",
+          "name": "",
+          "description": "",
+          "surrogateAuthRequired": false,
+          "enabled": true,
+          "alwaysDisplayInConsole": false,
+          "clientAuthenticatorType": "client-secret",
+          "secret": "F2GqU40xwX0P2LrTvHUHqwNoSk4U4n5R",
+          "redirectUris": [
+            "*"
+          ],
+          "webOrigins": [
+            "*"
+          ],
+          "notBefore": 0,
+          "bearerOnly": false,
+          "consentRequired": false,
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": true,
+          "serviceAccountsEnabled": false,
+          "publicClient": false,
+          "frontchannelLogout": true,
+          "protocol": "openid-connect",
+          "attributes": {
+            "oidc.ciba.grant.enabled": "false",
+            "oauth2.device.authorization.grant.enabled": "false",
+            "client.secret.creation.time": "1691350623",
+            "backchannel.logout.session.required": "true",
+            "backchannel.logout.revoke.offline.tokens": "false",
+            "request.uris": "",
+            "acr.loa.map": "{}",
+            "pkce.code.challenge.method": "S256",
+            "consent.screen.text": "",
+            "frontchannel.logout.url": "",
+            "backchannel.logout.url": "",
+            "login_theme": "",
+            "display.on.consent.screen": false,
+            "logoUri": "",
+            "policyUri": "",
+            "tosUri": "",
+            "access.token.signed.response.alg": "",
+            "id.token.signed.response.alg": "",
+            "id.token.encrypted.response.alg": "",
+            "id.token.encrypted.response.enc": "",
+            "user.info.response.signature.alg": "",
+            "request.object.signature.alg": "",
+            "request.object.encryption.alg": "",
+            "request.object.encryption.enc": "",
+            "request.object.required": "",
+            "authorization.signed.response.alg": "",
+            "authorization.encrypted.response.alg": "",
+            "authorization.encrypted.response.enc": "",
+            "exclude.session.state.from.auth.response": "",
+            "use.refresh.tokens": "true",
+            "client_credentials.use_refresh_token": "false",
+            "token.response.type.bearer.lower-case": "false",
+            "access.token.lifespan": "",
+            "tls-client-certificate-bound-access-tokens": false,
+            "require.pushed.authorization.requests": "false"
+          },
+          "authenticationFlowBindingOverrides": {
+            "browser": "",
+            "direct_grant": ""
+          },
+          "fullScopeAllowed": true,
+          "nodeReRegistrationTimeout": -1,
+          "defaultClientScopes": [
+            "web-origins",
+            "acr",
+            "profile",
+            "roles",
+            "email"
+          ],
+          "optionalClientScopes": [
+            "address",
+            "phone",
+            "offline_access",
+            "microprofile-jwt"
+          ],
+          "access": {
+            "view": true,
+            "configure": true,
+            "manage": true
+          },
+          "rootUrl": "",
+          "baseUrl": "",
+          "adminUrl": "",
+          "authorizationServicesEnabled": false
         }
       ],
       "clientScopes": [

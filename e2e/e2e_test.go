@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -23,13 +24,15 @@ import (
 )
 
 const (
-	testRealm        = "test"
-	testClient       = "test-client"
-	testClientSecret = "6447d0c0-d510-42a7-b654-6e3a16b2d7e2"
-	timeout          = time.Second * 300
-	idpURI           = "http://localhost:8081"
-	testUser         = "myuser"
-	testPass         = "baba1234"
+	testRealm            = "test"
+	testClient           = "test-client"
+	testClientSecret     = "6447d0c0-d510-42a7-b654-6e3a16b2d7e2"
+	pkceTestClient       = "test-client-pkce"
+	pkceTestClientSecret = "F2GqU40xwX0P2LrTvHUHqwNoSk4U4n5R"
+	timeout              = time.Second * 300
+	idpURI               = "http://localhost:8081"
+	testUser             = "myuser"
+	testPass             = "baba1234"
 )
 
 var idpRealmURI = fmt.Sprintf("%s/realms/%s", idpURI, testRealm)
@@ -67,18 +70,21 @@ var _ = Describe("NoRedirects Simple login/logout", func() {
 		portNum = generateRandomPort()
 		proxyAddress = "http://localhost:" + portNum
 
-		os.Setenv("PROXY_DISCOVERY_URL", idpRealmURI)
-		os.Setenv("PROXY_OPENID_PROVIDER_TIMEOUT", "120s")
-		os.Setenv("PROXY_LISTEN", "0.0.0.0:"+portNum)
-		os.Setenv("PROXY_CLIENT_ID", testClient)
-		os.Setenv("PROXY_CLIENT_SECRET", testClientSecret)
-		os.Setenv("PROXY_UPSTREAM_URL", server.URL)
-		os.Setenv("PROXY_NO_REDIRECTS", "true")
-		os.Setenv("PROXY_SKIP_ACCESS_TOKEN_CLIENT_ID_CHECK", "true")
-		os.Setenv("PROXY_SKIP_ACCESS_TOKEN_ISSUER_CHECK", "true")
-		os.Setenv("PROXY_OPENID_PROVIDER_RETRY_COUNT", "30")
-
 		osArgs := []string{os.Args[0]}
+		proxyArgs := []string{
+			"--discovery-url=" + idpRealmURI,
+			"--openid-provider-timeout=120s",
+			"--listen=" + "0.0.0.0:" + portNum,
+			"--client-id=" + testClient,
+			"--client-secret=" + testClientSecret,
+			"--upstream-url=" + server.URL,
+			"--no-redirects=true",
+			"--skip-access-token-clientid-check=true",
+			"--skip-access-token-issuer-check=true",
+			"--openid-provider-retry-count=30",
+		}
+
+		osArgs = append(osArgs, proxyArgs...)
 		startAndWait(portNum, osArgs)
 	})
 
@@ -114,19 +120,22 @@ var _ = Describe("Code Flow Simple login/logout", func() {
 		portNum = generateRandomPort()
 		proxyAddress = "http://localhost:" + portNum
 
-		os.Setenv("PROXY_DISCOVERY_URL", idpRealmURI)
-		os.Setenv("PROXY_OPENID_PROVIDER_TIMEOUT", "120s")
-		os.Setenv("PROXY_LISTEN", "0.0.0.0:"+portNum)
-		os.Setenv("PROXY_CLIENT_ID", testClient)
-		os.Setenv("PROXY_CLIENT_SECRET", testClientSecret)
-		os.Setenv("PROXY_UPSTREAM_URL", server.URL)
-		os.Setenv("PROXY_NO_REDIRECTS", "false")
-		os.Setenv("PROXY_SKIP_ACCESS_TOKEN_CLIENT_ID_CHECK", "true")
-		os.Setenv("PROXY_SKIP_ACCESS_TOKEN_ISSUER_CHECK", "true")
-		os.Setenv("PROXY_OPENID_PROVIDER_RETRY_COUNT", "30")
-		os.Setenv("PROXY_SECURE_COOKIE", "false")
-
 		osArgs := []string{os.Args[0]}
+		proxyArgs := []string{
+			"--discovery-url=" + idpRealmURI,
+			"--openid-provider-timeout=120s",
+			"--listen=" + "0.0.0.0:" + portNum,
+			"--client-id=" + testClient,
+			"--client-secret=" + testClientSecret,
+			"--upstream-url=" + server.URL,
+			"--no-redirects=false",
+			"--skip-access-token-clientid-check=true",
+			"--skip-access-token-issuer-check=true",
+			"--openid-provider-retry-count=30",
+			"--secure-cookie=false",
+		}
+
+		osArgs = append(osArgs, proxyArgs...)
 		startAndWait(portNum, osArgs)
 	})
 
@@ -153,6 +162,74 @@ var _ = Describe("Code Flow Simple login/logout", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 			Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
+		})
+
+		resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+
+		rClient.SetRedirectPolicy(resty.NoRedirectPolicy())
+		resp, err = rClient.R().Get(proxyAddress)
+		Expect(resp.StatusCode()).To(Equal(http.StatusSeeOther))
+	})
+})
+
+var _ = Describe("Code Flow PKCE login/logout", func() {
+	var portNum string
+	var proxyAddress string
+	var pkceCookieName = "TESTPKCECOOKIE"
+
+	BeforeEach(func() {
+		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
+		portNum = generateRandomPort()
+		proxyAddress = "http://localhost:" + portNum
+		osArgs := []string{os.Args[0]}
+		proxyArgs := []string{
+			"--discovery-url=" + idpRealmURI,
+			"--openid-provider-timeout=120s",
+			"--listen=" + "0.0.0.0:" + portNum,
+			"--client-id=" + pkceTestClient,
+			"--client-secret=" + pkceTestClientSecret,
+			"--upstream-url=" + server.URL,
+			"--no-redirects=false",
+			"--skip-access-token-clientid-check=true",
+			"--skip-access-token-issuer-check=true",
+			"--openid-provider-retry-count=30",
+			"--secure-cookie=false",
+			"--enable-pkce=true",
+			"--cookie-pkce-name=" + pkceCookieName,
+		}
+
+		osArgs = append(osArgs, proxyArgs...)
+		startAndWait(portNum, osArgs)
+	})
+
+	It("should login with user/password and logout successfully", func(ctx context.Context) {
+		rClient := resty.New().SetRedirectPolicy(resty.FlexibleRedirectPolicy(5))
+		resp, err := rClient.R().Get(proxyAddress)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+
+		doc, err := goquery.NewDocumentFromReader(bytes.NewReader(resp.Body()))
+		Expect(err).NotTo(HaveOccurred())
+
+		selection := doc.Find("#kc-form-login")
+		Expect(selection).ToNot(BeNil())
+
+		selection.Each(func(i int, s *goquery.Selection) {
+			action, exists := s.Attr("action")
+			Expect(exists).To(BeTrue())
+
+			rClient.FormData.Add("username", testUser)
+			rClient.FormData.Add("password", testPass)
+			resp, err = rClient.R().Post(action)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+			Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
+
+			body := resp.Body()
+			Expect(strings.Contains(string(body), pkceCookieName)).To(BeTrue())
 		})
 
 		resp, err = rClient.R().Get(proxyAddress + "/oauth/logout")
