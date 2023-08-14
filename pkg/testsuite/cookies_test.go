@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogatekeeper/gatekeeper/pkg/config"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
+	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
 	"github.com/stretchr/testify/assert"
 )
 

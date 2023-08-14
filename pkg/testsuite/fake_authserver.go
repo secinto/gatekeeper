@@ -18,9 +18,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
-	"github.com/gogatekeeper/gatekeeper/pkg/config"
+	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
-	"github.com/gogatekeeper/gatekeeper/pkg/proxy"
+	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
 	"github.com/grokify/go-pkce"
 	"github.com/jochasinga/relay"
 	jose2 "gopkg.in/square/go-jose.v2"
@@ -522,7 +522,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 	refreshToken.setExpiration(refreshExpires)
 	codeVerifier := ""
 
-	if req.FormValue("grant_type") == config.GrantTypeUmaTicket {
+	if req.FormValue("grant_type") == configcore.GrantTypeUmaTicket {
 		token.claims.Authorization = authorization.Permissions{
 			Permissions: []authorization.Permission{
 				{
@@ -557,7 +557,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 	}
 
 	switch req.FormValue("grant_type") {
-	case config.GrantTypeUserCreds:
+	case configcore.GrantTypeUserCreds:
 		username := req.FormValue("username")
 		password := req.FormValue("password")
 
@@ -580,7 +580,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			"error":             "invalid_grant",
 			"error_description": "invalid user credentials",
 		})
-	case config.GrantTypeClientCreds:
+	case configcore.GrantTypeClientCreds:
 		clientID := req.FormValue("client_id")
 		clientSecret := req.FormValue("client_secret")
 
@@ -609,7 +609,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			"error":             "invalid_grant",
 			"error_description": "invalid client credentials",
 		})
-	case config.GrantTypeRefreshToken:
+	case configcore.GrantTypeRefreshToken:
 		oldRefreshToken, err := jwt.ParseSigned(req.FormValue("refresh_token"))
 
 		if err != nil {
@@ -653,7 +653,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			AccessToken: jwtAccess,
 			ExpiresIn:   float64(expires.Second()),
 		})
-	case config.GrantTypeAuthCode:
+	case configcore.GrantTypeAuthCode:
 		if r.fakeAuthConfig.EnablePKCE {
 			codeChallenge := pkce.CodeChallengeS256(codeVerifier)
 			if codeChallenge != r.pkceChallenge {
@@ -668,7 +668,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			RefreshToken: jwtRefresh,
 			ExpiresIn:    float64(expires.Second()),
 		})
-	case config.GrantTypeUmaTicket:
+	case configcore.GrantTypeUmaTicket:
 		renderJSON(http.StatusOK, writer, req, proxy.TokenResponse{
 			IDToken:      jwtAccess,
 			AccessToken:  jwtAccess,

@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/config"
+	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/urfave/cli"
 )
@@ -32,16 +33,18 @@ func TestNewOauthProxyApp(t *testing.T) {
 }
 
 func TestGetCLIOptions(t *testing.T) {
-	if flags := getCommandLineOptions(); flags == nil {
+	cfg := config.ProduceConfig(proxycore.Provider)
+	if flags := getCommandLineOptions(cfg); flags == nil {
 		t.Error("we should have received some flags options")
 	}
 }
 
 func TestReadOptions(t *testing.T) {
 	capp := cli.NewApp()
-	capp.Flags = getCommandLineOptions()
+	cfg := config.ProduceConfig(proxycore.Provider)
+	capp.Flags = getCommandLineOptions(cfg)
 	capp.Action = func(cx *cli.Context) error {
-		ero := parseCLIOptions(cx, &config.Config{})
+		ero := parseCLIOptions(cx, cfg)
 		assert.NoError(t, ero)
 		return nil
 	}

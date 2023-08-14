@@ -22,7 +22,8 @@ import (
 	"time"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
-	"github.com/gogatekeeper/gatekeeper/pkg/config"
+	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
+	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
 	"github.com/grokify/go-pkce"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
@@ -163,7 +164,7 @@ func exchangeAuthenticationCode(
 ) (*oauth2.Token, error) {
 	return getToken(
 		client,
-		config.GrantTypeAuthCode,
+		core.GrantTypeAuthCode,
 		code,
 		codeVerifierCookie,
 		skipOpenIDProviderTLSVerify,
@@ -194,7 +195,7 @@ func getToken(
 	start := time.Now()
 	authCodeOptions := []oauth2.AuthCodeOption{}
 
-	if grantType == config.GrantTypeAuthCode {
+	if grantType == core.GrantTypeAuthCode {
 		if codeVerifierCookie != nil {
 			if codeVerifierCookie.Value == "" {
 				return nil, apperrors.ErrPKCECookieEmpty
@@ -215,10 +216,10 @@ func getToken(
 	taken := time.Since(start).Seconds()
 
 	switch grantType {
-	case config.GrantTypeAuthCode:
+	case core.GrantTypeAuthCode:
 		oauthTokensMetric.WithLabelValues("exchange").Inc()
 		oauthLatencyMetric.WithLabelValues("exchange").Observe(taken)
-	case config.GrantTypeRefreshToken:
+	case core.GrantTypeRefreshToken:
 		oauthTokensMetric.WithLabelValues("renew").Inc()
 		oauthLatencyMetric.WithLabelValues("renew").Observe(taken)
 	}

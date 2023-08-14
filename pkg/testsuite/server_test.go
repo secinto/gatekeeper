@@ -33,9 +33,10 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
-	"github.com/gogatekeeper/gatekeeper/pkg/config"
+	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
-	"github.com/gogatekeeper/gatekeeper/pkg/proxy"
+	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
+	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/square/go-jose.v2/jwt"
@@ -225,7 +226,7 @@ func TestForwardingProxy(t *testing.T) {
 				conf.ForwardingDomains = []string{}
 				conf.ForwardingUsername = ValidUsername
 				conf.ForwardingPassword = ValidPassword
-				conf.ForwardingGrantType = config.GrantTypeUserCreds
+				conf.ForwardingGrantType = configcore.GrantTypeUserCreds
 				conf.PatRetryCount = 5
 				conf.PatRetryInterval = 2 * time.Second
 				conf.OpenIDProviderTimeout = 30 * time.Second
@@ -247,7 +248,7 @@ func TestForwardingProxy(t *testing.T) {
 				conf.ForwardingDomains = []string{}
 				conf.ForwardingUsername = ValidUsername
 				conf.ForwardingPassword = ValidPassword
-				conf.ForwardingGrantType = config.GrantTypeUserCreds
+				conf.ForwardingGrantType = configcore.GrantTypeUserCreds
 				conf.PatRetryCount = 5
 				conf.PatRetryInterval = 2 * time.Second
 			},
@@ -276,7 +277,7 @@ func TestForwardingProxy(t *testing.T) {
 				conf.ForwardingDomains = []string{}
 				conf.ClientID = ValidUsername
 				conf.ClientSecret = ValidPassword
-				conf.ForwardingGrantType = config.GrantTypeClientCreds
+				conf.ForwardingGrantType = configcore.GrantTypeClientCreds
 				conf.PatRetryCount = 5
 				conf.PatRetryInterval = 2 * time.Second
 			},
@@ -297,7 +298,7 @@ func TestForwardingProxy(t *testing.T) {
 				conf.ForwardingDomains = []string{}
 				conf.ClientID = ValidUsername
 				conf.ClientSecret = ValidPassword
-				conf.ForwardingGrantType = config.GrantTypeClientCreds
+				conf.ForwardingGrantType = configcore.GrantTypeClientCreds
 				conf.PatRetryCount = 5
 				conf.PatRetryInterval = 2 * time.Second
 			},
@@ -370,7 +371,7 @@ func TestUmaForwardingProxy(t *testing.T) {
 				conf.ForwardingDomains = []string{}
 				conf.ForwardingUsername = ValidUsername
 				conf.ForwardingPassword = ValidPassword
-				conf.ForwardingGrantType = config.GrantTypeUserCreds
+				conf.ForwardingGrantType = configcore.GrantTypeUserCreds
 				conf.PatRetryCount = 5
 				conf.PatRetryInterval = 2 * time.Second
 				conf.OpenIDProviderTimeout = 30 * time.Second
@@ -395,7 +396,7 @@ func TestUmaForwardingProxy(t *testing.T) {
 				conf.ForwardingDomains = []string{}
 				conf.ForwardingUsername = ValidUsername
 				conf.ForwardingPassword = ValidPassword
-				conf.ForwardingGrantType = config.GrantTypeUserCreds
+				conf.ForwardingGrantType = configcore.GrantTypeUserCreds
 				conf.PatRetryCount = 5
 				conf.PatRetryInterval = 2 * time.Second
 				conf.OpenIDProviderTimeout = 30 * time.Second
@@ -418,7 +419,7 @@ func TestUmaForwardingProxy(t *testing.T) {
 				conf.ForwardingDomains = []string{}
 				conf.ForwardingUsername = ValidUsername
 				conf.ForwardingPassword = ValidPassword
-				conf.ForwardingGrantType = config.GrantTypeUserCreds
+				conf.ForwardingGrantType = configcore.GrantTypeUserCreds
 				conf.PatRetryCount = 5
 				conf.PatRetryInterval = 2 * time.Second
 			},
@@ -448,7 +449,7 @@ func TestUmaForwardingProxy(t *testing.T) {
 				conf.ForwardingDomains = []string{}
 				conf.ClientID = ValidUsername
 				conf.ClientSecret = ValidPassword
-				conf.ForwardingGrantType = config.GrantTypeClientCreds
+				conf.ForwardingGrantType = configcore.GrantTypeClientCreds
 				conf.PatRetryCount = 5
 				conf.PatRetryInterval = 2 * time.Second
 			},

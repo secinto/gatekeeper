@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
+	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 )
 
@@ -69,10 +70,10 @@ redirection_url: http://127.0.0.1:3000
 
 	for idx, test := range testCases {
 		// step: write the fake config file
-		file := writeFakeConfigFile(t, test.Content)
+		file := core.WriteFakeConfigFile(t, test.Content)
 
 		config := new(Config)
-		err := ReadConfigFile(file.Name(), config)
+		err := config.ReadConfigFile(file.Name())
 
 		if test.Ok && err != nil {
 			os.Remove(file.Name())
@@ -1003,7 +1004,7 @@ func TestIsForwardingProxySettingsValid(t *testing.T) {
 				OpenIDProviderTimeout: 30 * time.Second,
 				ClientID:              "some-client",
 				DiscoveryURL:          "https://somediscoveryurl",
-				ForwardingGrantType:   GrantTypeUserCreds,
+				ForwardingGrantType:   core.GrantTypeUserCreds,
 				ForwardingUsername:    "someuser",
 				ForwardingPassword:    "somepass",
 			},
@@ -1025,7 +1026,7 @@ func TestIsForwardingProxySettingsValid(t *testing.T) {
 				OpenIDProviderTimeout: 30 * time.Second,
 				ClientID:              "",
 				DiscoveryURL:          "https://somediscoveryurl",
-				ForwardingGrantType:   GrantTypeUserCreds,
+				ForwardingGrantType:   core.GrantTypeUserCreds,
 				ForwardingUsername:    "someuser",
 				ForwardingPassword:    "somepass",
 			},
@@ -1040,7 +1041,7 @@ func TestIsForwardingProxySettingsValid(t *testing.T) {
 				OpenIDProviderTimeout: 30 * time.Second,
 				ClientID:              "some-client",
 				DiscoveryURL:          "https://somediscoveryurl",
-				ForwardingGrantType:   GrantTypeUserCreds,
+				ForwardingGrantType:   core.GrantTypeUserCreds,
 				ForwardingUsername:    "someuser",
 				ForwardingPassword:    "somepass",
 				TLSCertificate:        "/sometest",
@@ -1056,7 +1057,7 @@ func TestIsForwardingProxySettingsValid(t *testing.T) {
 				OpenIDProviderTimeout: 30 * time.Second,
 				ClientID:              "some-client",
 				DiscoveryURL:          "https://somediscoveryurl",
-				ForwardingGrantType:   GrantTypeUserCreds,
+				ForwardingGrantType:   core.GrantTypeUserCreds,
 				ForwardingUsername:    "someuser",
 				ForwardingPassword:    "somepass",
 				TLSPrivateKey:         "/sometest",
@@ -1460,36 +1461,36 @@ func TestIsForwardingGrantValid(t *testing.T) {
 		Valid  bool
 	}{
 		{
-			Name: "ValidForwardingGrantTypeUserCreds",
+			Name: "ValidForwardingcore.GrantTypeUserCreds",
 			Config: &Config{
-				ForwardingGrantType: GrantTypeUserCreds,
+				ForwardingGrantType: core.GrantTypeUserCreds,
 				ForwardingUsername:  "someuser",
 				ForwardingPassword:  "somepass",
 			},
 			Valid: true,
 		},
 		{
-			Name: "InValidForwardingGrantTypeUserCredsMissingUsername",
+			Name: "InValidForwardingcore.GrantTypeUserCredsMissingUsername",
 			Config: &Config{
-				ForwardingGrantType: GrantTypeUserCreds,
+				ForwardingGrantType: core.GrantTypeUserCreds,
 				ForwardingUsername:  "",
 				ForwardingPassword:  "somepass",
 			},
 			Valid: false,
 		},
 		{
-			Name: "InValidForwardingGrantTypeUserCredsMissingPassword",
+			Name: "InValidForwardingcore.GrantTypeUserCredsMissingPassword",
 			Config: &Config{
-				ForwardingGrantType: GrantTypeUserCreds,
+				ForwardingGrantType: core.GrantTypeUserCreds,
 				ForwardingUsername:  "",
 				ForwardingPassword:  "somepass",
 			},
 			Valid: false,
 		},
 		{
-			Name: "InValidForwardingGrantTypeUserCredsBoth",
+			Name: "InValidForwardingcore.GrantTypeUserCredsBoth",
 			Config: &Config{
-				ForwardingGrantType: GrantTypeUserCreds,
+				ForwardingGrantType: core.GrantTypeUserCreds,
 				ForwardingUsername:  "",
 				ForwardingPassword:  "",
 			},
@@ -1498,7 +1499,7 @@ func TestIsForwardingGrantValid(t *testing.T) {
 		{
 			Name: "ValidForwardingGrantTypeClientCreds",
 			Config: &Config{
-				ForwardingGrantType: GrantTypeClientCreds,
+				ForwardingGrantType: core.GrantTypeClientCreds,
 				ClientSecret:        "somesecret",
 			},
 			Valid: true,
@@ -1506,7 +1507,7 @@ func TestIsForwardingGrantValid(t *testing.T) {
 		{
 			Name: "InValidForwardingGrantTypeClientCreds",
 			Config: &Config{
-				ForwardingGrantType: GrantTypeClientCreds,
+				ForwardingGrantType: core.GrantTypeClientCreds,
 				ClientSecret:        "",
 			},
 			Valid: false,

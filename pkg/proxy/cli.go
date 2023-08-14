@@ -25,21 +25,23 @@ import (
 
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/config"
+	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
+	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/urfave/cli"
 )
 
 // newOauthProxyApp creates a new cli application and runs it
 func NewOauthProxyApp() *cli.App {
-	defaultConfig := config.NewDefaultConfig()
+	cfg := config.ProduceConfig(proxycore.Provider)
 	app := cli.NewApp()
 	app.Name = constant.Prog
 	app.Usage = constant.Description
-	app.Version = GetVersion()
+	app.Version = proxycore.GetVersion()
 	app.Author = constant.Author
 	app.Email = constant.Email
-	app.Flags = getCommandLineOptions()
+	app.Flags = getCommandLineOptions(cfg)
 	app.UsageText = fmt.Sprintf("%s [options]", constant.Prog)
 
 	// step: the standard usage message isn't that helpful
@@ -53,7 +55,7 @@ func NewOauthProxyApp() *cli.App {
 		configFile := cliCx.String("config")
 		// step: do we have a configuration file?
 		if configFile != "" {
-			if err := config.ReadConfigFile(configFile, defaultConfig); err != nil {
+			if err := cfg.ReadConfigFile(configFile); err != nil {
 				return utils.PrintError(
 					"unable to read the configuration file: %s, error: %s",
 					configFile,
@@ -63,17 +65,17 @@ func NewOauthProxyApp() *cli.App {
 		}
 
 		// step: parse the command line options
-		if err := parseCLIOptions(cliCx, defaultConfig); err != nil {
+		if err := parseCLIOptions(cliCx, cfg); err != nil {
 			return utils.PrintError(err.Error())
 		}
 
 		// step: validate the configuration
-		if err := defaultConfig.IsValid(); err != nil {
+		if err := cfg.IsValid(); err != nil {
 			return utils.PrintError(err.Error())
 		}
 
 		// step: create the proxy
-		proxy, err := NewProxy(defaultConfig)
+		proxy, err := ProduceProxy(cfg)
 		if err != nil {
 			return utils.PrintError(err.Error())
 		}
@@ -99,13 +101,12 @@ func NewOauthProxyApp() *cli.App {
 	the Config struct and extracting the tagged information
 */
 //nolint:cyclop
-func getCommandLineOptions() []cli.Flag {
-	defaults := config.NewDefaultConfig()
+func getCommandLineOptions(cfg core.Configs) []cli.Flag {
 	var flags []cli.Flag
-	count := reflect.TypeOf(config.Config{}).NumField()
+	count := reflect.TypeOf(cfg).Elem().NumField()
 
 	for i := 0; i < count; i++ {
-		field := reflect.TypeOf(config.Config{}).Field(i)
+		field := reflect.TypeOf(cfg).Elem().Field(i)
 		usage, found := field.Tag.Lookup("usage")
 
 		if !found {
@@ -122,7 +123,7 @@ func getCommandLineOptions() []cli.Flag {
 
 		switch fType := field.Type; fType.Kind() {
 		case reflect.Bool:
-			dv := reflect.ValueOf(defaults).Elem().FieldByName(field.Name).Bool()
+			dv := reflect.ValueOf(cfg).Elem().FieldByName(field.Name).Bool()
 			msg := fmt.Sprintf("%s (default: %t)", usage, dv)
 
 			flags = append(flags, cli.BoolTFlag{
@@ -131,7 +132,7 @@ func getCommandLineOptions() []cli.Flag {
 				EnvVar: envName,
 			})
 		case reflect.String:
-			defaultValue := reflect.ValueOf(defaults).Elem().FieldByName(field.Name).String()
+			defaultValue := reflect.ValueOf(cfg).Elem().FieldByName(field.Name).String()
 
 			flags = append(flags, cli.StringFlag{
 				Name:   optName,
@@ -155,7 +156,7 @@ func getCommandLineOptions() []cli.Flag {
 		case reflect.Int64:
 			switch fType.String() {
 			case constant.DurationType:
-				dv := reflect.ValueOf(defaults).Elem().FieldByName(field.Name).Int()
+				dv := reflect.ValueOf(cfg).Elem().FieldByName(field.Name).Int()
 
 				flags = append(flags, cli.DurationFlag{
 					Name:   optName,
@@ -180,7 +181,7 @@ func getCommandLineOptions() []cli.Flag {
 	and constructs a config object
 */
 //nolint:cyclop
-func parseCLIOptions(cliCtx *cli.Context, config *config.Config) error {
+func parseCLIOptions(cliCtx *cli.Context, config core.Configs) error {
 	// step: we can ignore these options in the Config struct
 	ignoredOptions := []string{"tag-data", "match-claims", "resources", "headers"}
 	// step: iterate the Config and grab command line options via reflection
@@ -220,7 +221,7 @@ func parseCLIOptions(cliCtx *cli.Context, config *config.Config) error {
 		if err != nil {
 			return err
 		}
-		utils.MergeMaps(config.Tags, tags)
+		utils.MergeMaps(config.GetTags(), tags)
 	}
 
 	if cliCtx.IsSet("match-claims") {
@@ -228,7 +229,7 @@ func parseCLIOptions(cliCtx *cli.Context, config *config.Config) error {
 		if err != nil {
 			return err
 		}
-		utils.MergeMaps(config.MatchClaims, claims)
+		utils.MergeMaps(config.GetMatchClaims(), claims)
 	}
 
 	if cliCtx.IsSet("headers") {
@@ -236,7 +237,7 @@ func parseCLIOptions(cliCtx *cli.Context, config *config.Config) error {
 		if err != nil {
 			return err
 		}
-		utils.MergeMaps(config.Headers, headers)
+		utils.MergeMaps(config.GetHeaders(), headers)
 	}
 
 	if cliCtx.IsSet("resources") {
@@ -245,7 +246,7 @@ func parseCLIOptions(cliCtx *cli.Context, config *config.Config) error {
 			if err != nil {
 				return fmt.Errorf("invalid resource %s, %s", x, err)
 			}
-			config.Resources = append(config.Resources, resource)
+			config.SetResources(append(config.GetResources(), resource))
 		}
 	}
 

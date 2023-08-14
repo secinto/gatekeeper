@@ -27,14 +27,12 @@ import (
 	"net"
 
 	"net/http"
-	"net/http/pprof"
 	"net/url"
 	"path"
 	"strings"
 	"time"
 
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
-	"github.com/go-chi/chi/v5"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -719,9 +717,6 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 	}
 }
 
-// emptyHandler is responsible for doing nothing
-func emptyHandler(w http.ResponseWriter, req *http.Request) {}
-
 /*
 	logoutHandler performs a logout
 	- if it's just a access token, the cookie is deleted
@@ -971,53 +966,6 @@ func (r *OauthProxy) tokenHandler(wrt http.ResponseWriter, req *http.Request) {
 	_, _ = wrt.Write(result)
 }
 
-// healthHandler is a health check handler for the service
-func (r *OauthProxy) healthHandler(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set(constant.VersionHeader, GetVersion())
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("OK\n"))
-}
-
-// debugHandler is responsible for providing the pprof
-//
-//nolint:cyclop
-func (r *OauthProxy) debugHandler(writer http.ResponseWriter, req *http.Request) {
-	const symbolProfile = "symbol"
-	//nolint:contextcheck
-	name := chi.URLParam(req, "name")
-
-	switch req.Method {
-	case http.MethodGet:
-		switch name {
-		case "heap":
-			fallthrough
-		case "goroutine":
-			fallthrough
-		case "block":
-			fallthrough
-		case "threadcreate":
-			pprof.Handler(name).ServeHTTP(writer, req)
-		case "cmdline":
-			pprof.Cmdline(writer, req)
-		case "profile":
-			pprof.Profile(writer, req)
-		case "trace":
-			pprof.Trace(writer, req)
-		case symbolProfile:
-			pprof.Symbol(writer, req)
-		default:
-			writer.WriteHeader(http.StatusNotFound)
-		}
-	case http.MethodPost:
-		switch name {
-		case symbolProfile:
-			pprof.Symbol(writer, req)
-		default:
-			writer.WriteHeader(http.StatusNotFound)
-		}
-	}
-}
-
 // proxyMetricsHandler forwards the request into the prometheus handler
 func (r *OauthProxy) proxyMetricsHandler(wrt http.ResponseWriter, req *http.Request) {
 	if r.Config.LocalhostMetrics {
@@ -1068,11 +1016,6 @@ func (r *OauthProxy) retrieveIDToken(req *http.Request, user *UserContext) (stri
 	}
 
 	return token, encrypted, err
-}
-
-func methodNotAllowHandlder(w http.ResponseWriter, req *http.Request) {
-	w.WriteHeader(http.StatusMethodNotAllowed)
-	_, _ = w.Write(nil)
 }
 
 // discoveryHandler provides endpoint info

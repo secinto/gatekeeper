@@ -21,7 +21,7 @@ import (
 	"net/http"
 
 	"github.com/Nerzal/gocloak/v12"
-	"github.com/gogatekeeper/gatekeeper/pkg/config"
+	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
@@ -194,7 +194,7 @@ func (r *OauthProxy) forwardProxyHandler() func(*http.Request, *http.Response) {
 				return
 			}
 
-			grantType := config.GrantTypeUmaTicket
+			grantType := core.GrantTypeUmaTicket
 
 			rptOptions := gocloak.RequestingPartyTokenOptions{
 				GrantType: &grantType,
