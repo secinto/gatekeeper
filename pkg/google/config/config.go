@@ -16,10 +16,12 @@ limitations under the License.
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -30,6 +32,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
+	"gopkg.in/yaml.v2"
 )
 
 // Config is the configuration for the proxy
@@ -383,6 +386,24 @@ func (r *Config) GetMatchClaims() map[string]string {
 
 func (r *Config) GetTags() map[string]string {
 	return r.Tags
+}
+
+// readConfigFile reads and parses the configuration file
+func (r *Config) ReadConfigFile(filename string) error {
+	content, err := os.ReadFile(filename)
+
+	if err != nil {
+		return err
+	}
+	// step: attempt to un-marshal the data
+	switch ext := filepath.Ext(filename); ext {
+	case "json":
+		err = json.Unmarshal(content, r)
+	default:
+		err = yaml.Unmarshal(content, r)
+	}
+
+	return err
 }
 
 // WithOAuthURI returns the oauth uri

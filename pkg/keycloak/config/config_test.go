@@ -51,18 +51,18 @@ func TestReadConfiguration(t *testing.T) {
 	}{
 		{
 			Content: `
-discovery_url: https://keyclock.domain.com/
+discovery-url: https://keyclock.domain.com/
 client-id: <client_id>
-secret: <secret>
+client-secret: <secret>
 `,
 		},
 		{
 			Content: `
-discovery_url: https://keyclock.domain.com
+discovery-url: https://keyclock.domain.com
 client-id: <client_id>
-secret: <secret>
+client-secret: <secret>
 upstream-url: http://127.0.0.1:8080
-redirection_url: http://127.0.0.1:3000
+redirection-url: http://127.0.0.1:3000
 `,
 			Ok: true,
 		},
@@ -74,6 +74,15 @@ redirection_url: http://127.0.0.1:3000
 
 		config := new(Config)
 		err := config.ReadConfigFile(file.Name())
+
+		if config.ClientID != "<client_id>" || config.ClientSecret != "<secret>" {
+			os.Remove(file.Name())
+			t.Errorf(
+				"seems that test case %d doesn't read data properly, config: %v",
+				idx,
+				config,
+			)
+		}
 
 		if test.Ok && err != nil {
 			os.Remove(file.Name())

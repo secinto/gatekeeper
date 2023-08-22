@@ -1,13 +1,10 @@
 package core
 
 import (
-	"encoding/json"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
-	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -31,24 +28,6 @@ type Configs interface {
 }
 
 type CommonConfig struct{}
-
-// readConfigFile reads and parses the configuration file
-func (r *CommonConfig) ReadConfigFile(filename string) error {
-	content, err := os.ReadFile(filename)
-
-	if err != nil {
-		return err
-	}
-	// step: attempt to un-marshal the data
-	switch ext := filepath.Ext(filename); ext {
-	case "json":
-		err = json.Unmarshal(content, r)
-	default:
-		err = yaml.Unmarshal(content, r)
-	}
-
-	return err
-}
 
 func WriteFakeConfigFile(t *testing.T, content string) *os.File {
 	file, err := os.CreateTemp("", "node_label_file")
