@@ -37,7 +37,7 @@ import (
 
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -316,8 +316,8 @@ func GetHashKey(token string) string {
 }
 
 // printError display the command line usage and error
-func PrintError(message string, args ...interface{}) *cli.ExitError {
-	return cli.NewExitError(fmt.Sprintf("[error] "+message, args...), 1)
+func PrintError(message string, args ...interface{}) cli.ExitCoder {
+	return cli.Exit(fmt.Sprintf("[error] "+message, args...), 1)
 }
 
 // realIP retrieves the client ip address from a http request

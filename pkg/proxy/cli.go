@@ -29,7 +29,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 // newOauthProxyApp creates a new cli application and runs it
@@ -39,8 +39,6 @@ func NewOauthProxyApp() *cli.App {
 	app.Name = constant.Prog
 	app.Usage = constant.Description
 	app.Version = proxycore.GetVersion()
-	app.Author = constant.Author
-	app.Email = constant.Email
 	app.Flags = getCommandLineOptions(cfg)
 	app.UsageText = fmt.Sprintf("%s [options]", constant.Prog)
 
@@ -126,43 +124,43 @@ func getCommandLineOptions(cfg core.Configs) []cli.Flag {
 			dv := reflect.ValueOf(cfg).Elem().FieldByName(field.Name).Bool()
 			msg := fmt.Sprintf("%s (default: %t)", usage, dv)
 
-			flags = append(flags, cli.BoolTFlag{
-				Name:   optName,
-				Usage:  msg,
-				EnvVar: envName,
+			flags = append(flags, &cli.BoolFlag{
+				Name:    optName,
+				Usage:   msg,
+				EnvVars: []string{envName},
 			})
 		case reflect.String:
 			defaultValue := reflect.ValueOf(cfg).Elem().FieldByName(field.Name).String()
 
-			flags = append(flags, cli.StringFlag{
-				Name:   optName,
-				Usage:  usage,
-				EnvVar: envName,
-				Value:  defaultValue,
+			flags = append(flags, &cli.StringFlag{
+				Name:    optName,
+				Usage:   usage,
+				EnvVars: []string{envName},
+				Value:   defaultValue,
 			})
 		case reflect.Slice:
 			fallthrough
 		case reflect.Map:
-			flags = append(flags, cli.StringSliceFlag{
+			flags = append(flags, &cli.StringSliceFlag{
 				Name:  optName,
 				Usage: usage,
 			})
 		case reflect.Int:
-			flags = append(flags, cli.IntFlag{
-				Name:   optName,
-				Usage:  usage,
-				EnvVar: envName,
+			flags = append(flags, &cli.IntFlag{
+				Name:    optName,
+				Usage:   usage,
+				EnvVars: []string{envName},
 			})
 		case reflect.Int64:
 			switch fType.String() {
 			case constant.DurationType:
 				dv := reflect.ValueOf(cfg).Elem().FieldByName(field.Name).Int()
 
-				flags = append(flags, cli.DurationFlag{
-					Name:   optName,
-					Usage:  usage,
-					Value:  time.Duration(dv),
-					EnvVar: envName,
+				flags = append(flags, &cli.DurationFlag{
+					Name:    optName,
+					Usage:   usage,
+					Value:   time.Duration(dv),
+					EnvVars: []string{envName},
 				})
 			default:
 				panic("unknown uint64 type in the Config struct")

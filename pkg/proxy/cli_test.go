@@ -24,7 +24,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/config"
 	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/stretchr/testify/assert"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 func TestNewOauthProxyApp(t *testing.T) {
