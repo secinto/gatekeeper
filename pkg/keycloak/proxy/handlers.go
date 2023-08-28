@@ -686,6 +686,7 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 				RefreshToken: refreshToken,
 				ExpiresIn:    expiresIn,
 				Scope:        tScope,
+				TokenType:    token.TokenType,
 			}
 		} else {
 			resp = TokenResponse{
@@ -694,6 +695,7 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 				RefreshToken: refreshToken,
 				ExpiresIn:    expiresIn,
 				Scope:        tScope,
+				TokenType:    token.TokenType,
 			}
 		}
 

@@ -162,6 +162,12 @@ func TestLoginHandler(t *testing.T) {
 						"password": "test",
 						"username": "test",
 					},
+					ExpectedContent: func(body string, testNum int) {
+						resp := proxy.TokenResponse{}
+						err := json.Unmarshal([]byte(body), &resp)
+						require.NoError(t, err)
+						assert.Equal(t, "Bearer", resp.TokenType)
+					},
 					ExpectedCode: http.StatusOK,
 				},
 			},

@@ -568,6 +568,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 
 		if username == ValidUsername && password == ValidPassword {
 			renderJSON(http.StatusOK, writer, req, proxy.TokenResponse{
+				TokenType:    "Bearer",
 				IDToken:      jwtAccess,
 				AccessToken:  jwtAccess,
 				RefreshToken: jwtRefresh,
@@ -597,6 +598,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 
 		if clientID == ValidUsername && clientSecret == ValidPassword {
 			renderJSON(http.StatusOK, writer, req, proxy.TokenResponse{
+				TokenType:    "Bearer",
 				IDToken:      jwtAccess,
 				AccessToken:  jwtAccess,
 				RefreshToken: jwtRefresh,
@@ -649,6 +651,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 		}
 
 		renderJSON(http.StatusOK, writer, req, proxy.TokenResponse{
+			TokenType:   "Bearer",
 			IDToken:     jwtAccess,
 			AccessToken: jwtAccess,
 			ExpiresIn:   float64(expires.Second()),
@@ -663,6 +666,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 		}
 
 		renderJSON(http.StatusOK, writer, req, proxy.TokenResponse{
+			TokenType:    "Bearer",
 			IDToken:      jwtAccess,
 			AccessToken:  jwtAccess,
 			RefreshToken: jwtRefresh,
@@ -670,6 +674,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 		})
 	case configcore.GrantTypeUmaTicket:
 		renderJSON(http.StatusOK, writer, req, proxy.TokenResponse{
+			TokenType:    "Bearer",
 			IDToken:      jwtAccess,
 			AccessToken:  jwtAccess,
 			RefreshToken: jwtRefresh,
