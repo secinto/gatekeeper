@@ -370,7 +370,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 					if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
 						if accessToken, err = encryption.EncodeText(accessToken, r.Config.EncryptionKey); err != nil {
 							scope.Logger.Error(
-								"unable to encode the access token", zap.Error(err),
+								"unable to encode access token", zap.Error(err),
 								zap.String("email", user.Email),
 								zap.String("sub", user.ID),
 							)
@@ -396,7 +396,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 
 						if err != nil {
 							scope.Logger.Error(
-								"failed to encrypt the refresh token",
+								"failed to encrypt refresh token",
 								zap.Error(err),
 								zap.String("email", user.Email),
 								zap.String("sub", user.ID),

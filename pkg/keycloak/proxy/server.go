@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"go.uber.org/zap/zapcore"
-	"gopkg.in/square/go-jose.v2/jwt"
 
 	"golang.org/x/crypto/acme/autocert"
 
@@ -47,7 +46,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
-	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
@@ -1132,124 +1130,4 @@ func (r *OauthProxy) NewOpenIDProvider() (*oidc3.Provider, *gocloak.GoCloak, err
 // Render implements the echo Render interface
 func (r *OauthProxy) Render(w io.Writer, name string, data interface{}) error {
 	return r.templates.ExecuteTemplate(w, name, data)
-}
-
-//nolint:cyclop
-func (r *OauthProxy) getPAT(done chan bool) {
-	retry := 0
-	r.pat = &PAT{}
-	initialized := false
-	rConfig := *r.Config
-	clientID := rConfig.ClientID
-	clientSecret := rConfig.ClientSecret
-	realm := rConfig.Realm
-	timeout := rConfig.OpenIDProviderTimeout
-	patRetryCount := rConfig.PatRetryCount
-	patRetryInterval := rConfig.PatRetryInterval
-	grantType := configcore.GrantTypeClientCreds
-
-	if rConfig.EnableForwarding && rConfig.ForwardingGrantType == configcore.GrantTypeUserCreds {
-		grantType = configcore.GrantTypeUserCreds
-	}
-
-	for {
-		if retry > 0 {
-			r.Log.Info(
-				"retrying fetching PAT token",
-				zap.Int("retry", retry),
-			)
-		}
-
-		ctx, cancel := context.WithTimeout(
-			context.Background(),
-			timeout,
-		)
-
-		var token *gocloak.JWT
-		var err error
-
-		switch grantType {
-		case configcore.GrantTypeClientCreds:
-			token, err = r.IdpClient.LoginClient(
-				ctx,
-				clientID,
-				clientSecret,
-				realm,
-			)
-		case configcore.GrantTypeUserCreds:
-			token, err = r.IdpClient.Login(
-				ctx,
-				clientID,
-				clientSecret,
-				realm,
-				rConfig.ForwardingUsername,
-				rConfig.ForwardingPassword,
-			)
-		default:
-			r.Log.Error(
-				"Chosen grant type is not supported",
-				zap.String("grant_type", grantType),
-			)
-			os.Exit(11)
-		}
-
-		if err != nil {
-			retry++
-			r.Log.Error(
-				"problem getting PAT token",
-
-				zap.Error(err),
-			)
-
-			if retry >= patRetryCount {
-				cancel()
-				os.Exit(10)
-			}
-
-			<-time.After(patRetryInterval)
-			continue
-		}
-
-		r.pat.m.Lock()
-		r.pat.Token = token
-		r.pat.m.Unlock()
-
-		if !initialized {
-			done <- true
-		}
-
-		initialized = true
-
-		parsedToken, err := jwt.ParseSigned(token.AccessToken)
-
-		if err != nil {
-			retry++
-			r.Log.Error("failed to parse the access token", zap.Error(err))
-			<-time.After(patRetryInterval)
-			continue
-		}
-
-		stdClaims := &jwt.Claims{}
-
-		err = parsedToken.UnsafeClaimsWithoutVerification(stdClaims)
-
-		if err != nil {
-			retry++
-			r.Log.Error("unable to parse access token for claims", zap.Error(err))
-			<-time.After(patRetryInterval)
-			continue
-		}
-
-		retry = 0
-		expiration := stdClaims.Expiry.Time()
-
-		refreshIn := utils.GetWithin(expiration, 0.85)
-
-		r.Log.Info(
-			"waiting for expiration of access token",
-			zap.Float64("refresh_in", refreshIn.Seconds()),
-		)
-
-		<-time.After(refreshIn)
-	}
 }

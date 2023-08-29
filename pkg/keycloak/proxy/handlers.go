@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,7 +31,6 @@ import (
 	"strings"
 	"time"
 
-	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -170,7 +168,7 @@ func (r *OauthProxy) oauthAuthorizationHandler(wrt http.ResponseWriter, req *htt
 /*
 	oauthCallbackHandler is responsible for handling the response from oauth service
 */
-//nolint:funlen,cyclop
+//nolint:cyclop
 func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.Request) {
 	if r.Config.SkipTokenVerification {
 		writer.WriteHeader(http.StatusNotAcceptable)
@@ -178,293 +176,81 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 	}
 
 	scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
-
 	if !assertOk {
-		r.Log.Error(
-			"assertion failed",
-		)
+		r.Log.Error("assertion failed")
 		return
-	}
-
-	// step: ensure we have a authorization code
-	code := req.URL.Query().Get("code")
-
-	if code == "" {
-		r.accessError(writer, req)
-		return
-	}
-
-	conf := r.newOAuth2Config(r.getRedirectionURL(writer, req))
-
-	var codeVerifier *http.Cookie
-
-	if r.Config.EnablePKCE {
-		var err error
-		codeVerifier, err = req.Cookie(r.Config.CookiePKCEName)
-		if err != nil {
-			scope.Logger.Error("problem getting pkce cookie", zap.Error(err))
-			r.accessForbidden(writer, req)
-			return
-		}
 	}
 
 	//nolint:contextcheck
-	resp, err := exchangeAuthenticationCode(
-		conf,
-		code,
-		codeVerifier,
-		r.Config.SkipOpenIDProviderTLSVerify,
-	)
-
+	accessToken, identityToken, refreshToken, err := r.getCodeFlowTokens(scope, writer, req)
 	if err != nil {
-		scope.Logger.Error("unable to exchange code for access token", zap.Error(err))
-		r.accessForbidden(writer, req)
 		return
 	}
 
-	var rawToken string
-	// Flow: once we exchange the authorization code we parse the ID Token; we then check for an access token,
-	// if an access token is present and we can decode it, we use that as the session token, otherwise we default
-	// to the ID Token.
-	rawIDToken, assertOk := resp.Extra("id_token").(string)
-
-	if !assertOk {
-		scope.Logger.Error("unable to obtain id token", zap.Error(err))
-		r.accessForbidden(writer, req)
-		return
-	}
-
-	rawToken = rawIDToken
-
-	verifier := r.Provider.Verifier(&oidc3.Config{ClientID: r.Config.ClientID})
-
-	var idToken *oidc3.IDToken
-
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		r.Config.OpenIDProviderTimeout,
-	)
-
-	defer cancel()
+	rawAccessToken := accessToken
 
 	//nolint:contextcheck
-	idToken, err = verifier.Verify(ctx, rawIDToken)
-
+	stdClaims, customClaims, err := r.verifyOIDCTokens(scope, accessToken, identityToken, writer, req)
 	if err != nil {
-		scope.Logger.Error("unable to verify the id token", zap.Error(err))
-		r.accessForbidden(writer, req)
 		return
 	}
-
-	token, err := jwt.ParseSigned(rawIDToken)
-
-	if err != nil {
-		scope.Logger.Error("unable to parse id token", zap.Error(err))
-		r.accessForbidden(writer, req)
-		return
-	}
-
-	stdClaims := &jwt.Claims{}
-	// Extract custom claims
-	var customClaims struct {
-		Email string `json:"email"`
-	}
-
-	err = token.UnsafeClaimsWithoutVerification(stdClaims, &customClaims)
-
-	if err != nil {
-		scope.Logger.Error("unable to parse id token for claims", zap.Error(err))
-		r.accessForbidden(writer, req)
-		return
-	}
-
-	// check https://openid.net/specs/openid-connect-core-1_0.html#ImplicitIDToken - at_hash
-	// keycloak seems doesnt support yet at_hash
-	// https://stackoverflow.com/questions/60818373/configure-keycloak-to-include-an-at-hash-claim-in-the-id-token
-	if idToken.AccessTokenHash != "" {
-		err = idToken.VerifyAccessToken(resp.AccessToken)
-
-		if err != nil {
-			scope.Logger.Error("unable to verify access token", zap.Error(err))
-			r.accessForbidden(writer, req)
-			return
-		}
-	}
-
-	accToken, err := jwt.ParseSigned(resp.AccessToken)
-
-	if err == nil {
-		token = accToken
-		rawToken = resp.AccessToken
-	} else {
-		scope.Logger.Warn(
-			"unable to parse the access token, using id token only",
-			zap.Error(err),
-		)
-	}
-
-	stdClaims = &jwt.Claims{}
-
-	err = token.UnsafeClaimsWithoutVerification(stdClaims, &customClaims)
-
-	if err != nil {
-		scope.Logger.Error("unable to parse access token for claims", zap.Error(err))
-		r.accessForbidden(writer, req)
-		return
-	}
-
-	accessToken := rawToken
-	identityToken := rawIDToken
 
 	// step: are we encrypting the access token?
 	if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
-		if accessToken, err = encryption.EncodeText(accessToken, r.Config.EncryptionKey); err != nil {
-			scope.Logger.Error("unable to encode the access token", zap.Error(err))
-			writer.WriteHeader(http.StatusInternalServerError)
+		accessToken, err = r.encryptToken(scope, accessToken, r.Config.EncryptionKey, "access", writer, req)
+		if err != nil {
 			return
 		}
-		if identityToken, err = encryption.EncodeText(identityToken, r.Config.EncryptionKey); err != nil {
-			scope.Logger.Error("unable to encode the id token", zap.Error(err))
-			writer.WriteHeader(http.StatusInternalServerError)
+
+		identityToken, err = r.encryptToken(scope, identityToken, r.Config.EncryptionKey, "id", writer, req)
+		if err != nil {
 			return
 		}
 	}
-
-	scope.Logger.Debug(
-		"issuing access token for user",
-		zap.String("access token", accessToken),
-		zap.String("email", customClaims.Email),
-		zap.String("sub", stdClaims.Subject),
-		zap.String("expires", stdClaims.Expiry.Time().Format(time.RFC3339)),
-		zap.String("duration", time.Until(stdClaims.Expiry.Time()).String()),
-	)
-
-	scope.Logger.Info(
-		"issuing access token for user",
-		zap.String("email", customClaims.Email),
-		zap.String("sub", stdClaims.Subject),
-		zap.String("expires", stdClaims.Expiry.Time().Format(time.RFC3339)),
-		zap.String("duration", time.Until(stdClaims.Expiry.Time()).String()),
-	)
 
 	// @metric a token has been issued
 	oauthTokensMetric.WithLabelValues("issued").Inc()
 
+	oidcTokensCookiesExp := time.Until(stdClaims.Expiry.Time())
 	// step: does the response have a refresh token and we do NOT ignore refresh tokens?
-	if r.Config.EnableRefreshTokens && resp.RefreshToken != "" {
+	if r.Config.EnableRefreshTokens && refreshToken != "" {
 		var encrypted string
-		encrypted, err = encryption.EncodeText(resp.RefreshToken, r.Config.EncryptionKey)
-
+		stdRefreshClaims, err := r.verifyRefreshToken(scope, refreshToken, writer, req)
 		if err != nil {
-			scope.Logger.Error(
-				"failed to encrypt the refresh token",
-				zap.Error(err),
-				zap.String("sub", stdClaims.Subject),
-				zap.String("email", customClaims.Email),
-			)
-
-			writer.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		// drop in the access token - cookie expiration = access token
-		r.dropAccessTokenCookie(
-			req,
-			writer,
-			accessToken,
-			r.GetAccessCookieExpiration(resp.RefreshToken),
-		)
-
-		r.dropIDTokenCookie(
-			req,
-			writer,
-			identityToken,
-			r.GetAccessCookieExpiration(resp.RefreshToken),
-		)
-
-		var expiration time.Duration
-		// notes: not all idp refresh tokens are readable, google for example, so we attempt to decode into
-		// a jwt and if possible extract the expiration, else we default to 10 days
-
-		refreshToken, err := jwt.ParseSigned(resp.RefreshToken)
-
-		if err != nil {
-			scope.Logger.Error(
-				"failed to parse refresh token",
-				zap.Error(err),
-				zap.String("sub", stdClaims.Subject),
-				zap.String("email", customClaims.Email),
-			)
-
-			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
-		stdRefreshClaims := &jwt.Claims{}
-
-		err = refreshToken.UnsafeClaimsWithoutVerification(stdRefreshClaims)
-
+		oidcTokensCookiesExp = time.Until(stdRefreshClaims.Expiry.Time())
+		encrypted, err = r.encryptToken(scope, refreshToken, r.Config.EncryptionKey, "refresh", writer, req)
 		if err != nil {
-			expiration = 0
-		} else {
-			expiration = time.Until(stdRefreshClaims.Expiry.Time())
+			return
 		}
 
-		switch r.useStore() {
-		case true:
-			if err = r.StoreRefreshToken(rawToken, encrypted, expiration); err != nil {
-				scope.Logger.Warn(
+		switch {
+		case r.useStore():
+			if err = r.StoreRefreshToken(rawAccessToken, encrypted, oidcTokensCookiesExp); err != nil {
+				scope.Logger.Error(
 					"failed to save the refresh token in the store",
 					zap.Error(err),
 					zap.String("sub", stdClaims.Subject),
 					zap.String("email", customClaims.Email),
 				)
+				r.accessForbidden(writer, req)
+				return
 			}
 		default:
-			r.DropRefreshTokenCookie(req, writer, encrypted, expiration)
+			r.DropRefreshTokenCookie(req, writer, encrypted, oidcTokensCookiesExp)
 		}
-	} else {
-		r.dropAccessTokenCookie(
-			req,
-			writer,
-			accessToken,
-			time.Until(stdClaims.Expiry.Time()),
-		)
-		r.dropIDTokenCookie(
-			req,
-			writer,
-			identityToken,
-			time.Until(stdClaims.Expiry.Time()),
-		)
 	}
+
+	r.dropAccessTokenCookie(req, writer, accessToken, oidcTokensCookiesExp)
+	r.dropIDTokenCookie(req, writer, identityToken, oidcTokensCookiesExp)
 
 	// step: decode the request variable
 	redirectURI := "/"
-
 	if req.URL.Query().Get("state") != "" {
 		if encodedRequestURI, _ := req.Cookie(r.Config.CookieRequestURIName); encodedRequestURI != nil {
-			// some clients URL-escape padding characters
-			unescapedValue, err := url.PathUnescape(encodedRequestURI.Value)
-
-			if err != nil {
-				scope.Logger.Warn(
-					"app did send a corrupted redirectURI in cookie: invalid url escaping",
-					zap.Error(err),
-				)
-			}
-			// Since the value is passed with a cookie, we do not expect the client to use base64url (but the
-			// base64-encoded value may itself be url-encoded).
-			// This is safe for browsers using atob() but needs to be treated with care for nodeJS clients,
-			// which natively use base64url encoding, and url-escape padding '=' characters.
-			decoded, err := base64.StdEncoding.DecodeString(unescapedValue)
-
-			if err != nil {
-				scope.Logger.Warn(
-					"app did send a corrupted redirectURI in cookie: invalid base64url encoding",
-					zap.Error(err),
-					zap.String("encoded_value", unescapedValue))
-			}
-
-			redirectURI = string(decoded)
+			redirectURI = r.getRequestURIFromCookie(scope, encodedRequestURI)
 		}
 	}
 
@@ -574,15 +360,15 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 
 		if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
 			if accessToken, err = encryption.EncodeText(accessToken, r.Config.EncryptionKey); err != nil {
-				scope.Logger.Error("unable to encode the access token", zap.Error(err))
+				scope.Logger.Error("unable to encode access token", zap.Error(err))
 				return "unable to encode the access token",
 					http.StatusInternalServerError,
 					err
 			}
 
 			if idToken, err = encryption.EncodeText(idToken, r.Config.EncryptionKey); err != nil {
-				scope.Logger.Error("unable to encode the idToken token", zap.Error(err))
-				return "unable to encode the idToken token",
+				scope.Logger.Error("unable to encode idToken token", zap.Error(err))
+				return "unable to encode idToken token",
 					http.StatusInternalServerError,
 					err
 			}
@@ -593,8 +379,8 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 			refreshToken, err = encryption.EncodeText(token.RefreshToken, r.Config.EncryptionKey)
 
 			if err != nil {
-				scope.Logger.Error("failed to encrypt the refresh token", zap.Error(err))
-				return "failed to encrypt the refresh token",
+				scope.Logger.Error("failed to encrypt refresh token", zap.Error(err))
+				return "failed to encrypt refresh token",
 					http.StatusInternalServerError,
 					err
 			}

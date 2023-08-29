@@ -16,12 +16,9 @@ limitations under the License.
 package proxy
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 
-	"github.com/Nerzal/gocloak/v12"
-	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
@@ -114,105 +111,12 @@ func (r *OauthProxy) forwardProxyHandler() func(*http.Request, *http.Response) {
 		var token string
 
 		if r.Config.EnableUma {
-			ctx, cancel := context.WithTimeout(
-				context.Background(),
-				r.Config.OpenIDProviderTimeout,
-			)
-
-			defer cancel()
-
-			matchingURI := true
-
-			resourceParam := gocloak.GetResourceParams{
-				URI:         &req.URL.Path,
-				MatchingURI: &matchingURI,
-			}
-
-			r.pat.m.Lock()
-			pat := r.pat.Token.AccessToken
-			r.pat.m.Unlock()
-
-			resources, err := r.IdpClient.GetResourcesClient(
-				ctx,
-				pat,
-				r.Config.Realm,
-				resourceParam,
-			)
-
-			if err != nil {
-				r.Log.Error(
-					"problem getting resources for path",
-					zap.String("path", req.URL.Path),
-					zap.Error(err),
-				)
+			tk := r.getRPT(req, resp)
+			if tk != nil {
+				token = tk.AccessToken
+			} else {
 				return
 			}
-
-			if len(resources) == 0 {
-				r.Log.Info(
-					"no resources for path",
-					zap.String("path", req.URL.Path),
-				)
-				return
-			}
-
-			resourceID := resources[0].ID
-			resourceScopes := make([]string, 0)
-
-			if len(*resources[0].ResourceScopes) == 0 {
-				r.Log.Error(
-					"missing scopes for resource in IDP provider",
-					zap.String("resourceID", *resourceID),
-				)
-				return
-			}
-
-			for _, scope := range *resources[0].ResourceScopes {
-				resourceScopes = append(resourceScopes, *scope.Name)
-			}
-
-			permissions := []gocloak.CreatePermissionTicketParams{
-				{
-					ResourceID:     resourceID,
-					ResourceScopes: &resourceScopes,
-				},
-			}
-
-			permTicket, err := r.IdpClient.CreatePermissionTicket(
-				ctx,
-				pat,
-				r.Config.Realm,
-				permissions,
-			)
-
-			if err != nil {
-				r.Log.Error(
-					"problem getting permission ticket for resourceId",
-					zap.String("resourceID", *resourceID),
-					zap.Error(err),
-				)
-				return
-			}
-
-			grantType := core.GrantTypeUmaTicket
-
-			rptOptions := gocloak.RequestingPartyTokenOptions{
-				GrantType: &grantType,
-				Ticket:    permTicket.Ticket,
-			}
-
-			rpt, err := r.IdpClient.GetRequestingPartyToken(ctx, pat, r.Config.Realm, rptOptions)
-
-			if err != nil {
-				r.Log.Error(
-					"problem getting RPT for resource (hint: do you have permissions assigned to resource?)",
-					zap.String("resourceID", *resourceID),
-					zap.Error(err),
-				)
-				return
-			}
-
-			token = rpt.AccessToken
 		} else {
 			r.pat.m.Lock()
 			token = r.pat.Token.AccessToken
