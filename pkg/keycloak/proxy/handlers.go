@@ -70,6 +70,12 @@ func (r *OauthProxy) getRedirectionURL(wrt http.ResponseWriter, req *http.Reques
 			}
 		}
 
+		if scheme == constant.UnsecureScheme && r.Config.SecureCookie {
+			hint := "you have secure cookie set to true but using http "
+			hint += "use https or secure cookie false"
+			r.Log.Warn(hint)
+		}
+
 		redirect = fmt.Sprintf("%s://%s", scheme, host)
 	default:
 		redirect = r.Config.RedirectionURL
