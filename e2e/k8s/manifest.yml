@@ -495,6 +495,231 @@ data:
           "baseUrl": "",
           "adminUrl": "",
           "authorizationServicesEnabled": false
+        },
+        {
+          "id": "4c159536-d5d0-42ee-a64b-43d7cb5c1668",
+          "clientId": "test-client-uma",
+          "name": "",
+          "description": "",
+          "rootUrl": "",
+          "adminUrl": "",
+          "baseUrl": "",
+          "surrogateAuthRequired": false,
+          "enabled": true,
+          "alwaysDisplayInConsole": false,
+          "clientAuthenticatorType": "client-secret",
+          "secret": "A5vokiGdI3H2r4aXFrANbKvn4R7cbf6P",
+          "redirectUris": [
+            "*"
+          ],
+          "webOrigins": [],
+          "notBefore": 0,
+          "bearerOnly": false,
+          "consentRequired": false,
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "directAccessGrantsEnabled": true,
+          "serviceAccountsEnabled": true,
+          "authorizationServicesEnabled": true,
+          "publicClient": false,
+          "frontchannelLogout": true,
+          "protocol": "openid-connect",
+          "attributes": {
+            "access.token.lifespan": "300",
+            "oidc.ciba.grant.enabled": "false",
+            "client.secret.creation.time": "1694161560",
+            "backchannel.logout.session.required": "true",
+            "display.on.consent.screen": "false",
+            "oauth2.device.authorization.grant.enabled": "false",
+            "backchannel.logout.revoke.offline.tokens": "false"
+          },
+          "authenticationFlowBindingOverrides": {},
+          "fullScopeAllowed": true,
+          "nodeReRegistrationTimeout": -1,
+          "protocolMappers": [
+            {
+              "id": "53406d38-22ae-4195-87eb-530475e79c06",
+              "name": "Client Host",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usersessionmodel-note-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.session.note": "clientHost",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "clientHost",
+                "jsonType.label": "String"
+              }
+            },
+            {
+              "id": "506c87aa-d2cc-4342-a2f6-eda5ccb77486",
+              "name": "Client ID",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usersessionmodel-note-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.session.note": "clientId",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "clientId",
+                "jsonType.label": "String"
+              }
+            },
+            {
+              "id": "8432c797-1111-4b26-b3ea-e49e1cdd9306",
+              "name": "Client IP Address",
+              "protocol": "openid-connect",
+              "protocolMapper": "oidc-usersessionmodel-note-mapper",
+              "consentRequired": false,
+              "config": {
+                "user.session.note": "clientAddress",
+                "id.token.claim": "true",
+                "access.token.claim": "true",
+                "claim.name": "clientAddress",
+                "jsonType.label": "String"
+              }
+            }
+          ],
+          "defaultClientScopes": [
+            "web-origins",
+            "acr",
+            "profile",
+            "roles",
+            "email"
+          ],
+          "optionalClientScopes": [
+            "address",
+            "phone",
+            "offline_access",
+            "microprofile-jwt"
+          ],
+          "authorizationSettings": {
+            "allowRemoteResourceManagement": true,
+            "policyEnforcementMode": "ENFORCING",
+            "resources": [
+              {
+                "name": "onepet",
+                "ownerManagedAccess": true,
+                "attributes": {},
+                "_id": "90349071-4fbd-49cf-89ff-d7c4a311968b",
+                "uris": [
+                  "/pets/*"
+                ],
+                "scopes": [
+                  {
+                    "name": "mymy"
+                  }
+                ],
+                "icon_uri": ""
+              },
+              {
+                "name": "pets",
+                "ownerManagedAccess": true,
+                "attributes": {},
+                "_id": "f5e11025-0d33-4623-9514-7a9e073d0dc7",
+                "uris": [
+                  "/pets"
+                ],
+                "scopes": [
+                  {
+                    "name": "mymy"
+                  }
+                ],
+                "icon_uri": ""
+              },
+              {
+                "name": "horse",
+                "ownerManagedAccess": true,
+                "attributes": {},
+                "_id": "2b9b6898-3259-4215-9428-52c4d21e438e",
+                "uris": [
+                  "/horse"
+                ],
+                "scopes": [
+                  {
+                    "name": "method:GET"
+                  }
+                ],
+                "icon_uri": ""
+              },
+              {
+                "name": "turtle",
+                "ownerManagedAccess": true,
+                "attributes": {},
+                "_id": "00a7af15-584f-4f09-ad84-2b3f095f1798",
+                "uris": [
+                  "/turtle"
+                ],
+                "scopes": [
+                  {
+                    "name": "method:GET"
+                  }
+                ],
+                "icon_uri": ""
+              }
+            ],
+            "policies": [
+              {
+                "id": "3134be38-7c4b-43e4-9959-65dfd1709eb1",
+                "name": "tata",
+                "description": "",
+                "type": "user",
+                "logic": "POSITIVE",
+                "decisionStrategy": "UNANIMOUS",
+                "config": {
+                  "users": "[\"myuser\"]"
+                }
+              },
+              {
+                "id": "9be8c68c-5c11-4fb9-b60b-67c601d9805d",
+                "name": "forwclient",
+                "description": "",
+                "type": "client",
+                "logic": "POSITIVE",
+                "decisionStrategy": "UNANIMOUS",
+                "config": {
+                  "clients": "[\"test-client-uma\"]"
+                }
+              },
+              {
+                "id": "9466b340-4a02-471d-8716-c6608a79ee33",
+                "name": "test",
+                "description": "",
+                "type": "resource",
+                "logic": "POSITIVE",
+                "decisionStrategy": "UNANIMOUS",
+                "config": {
+                  "resources": "[\"horse\",\"pets\"]",
+                  "applyPolicies": "[\"tata\"]"
+                }
+              },
+              {
+                "id": "97f37d08-4a21-4a07-9af5-d9876cc90a99",
+                "name": "forward",
+                "description": "",
+                "type": "resource",
+                "logic": "POSITIVE",
+                "decisionStrategy": "UNANIMOUS",
+                "config": {
+                  "resources": "[\"turtle\"]",
+                  "applyPolicies": "[\"forwclient\"]"
+                }
+              }
+            ],
+            "scopes": [
+              {
+                "id": "434112a5-0533-4156-a8a0-a8c3a8a7f9ac",
+                "name": "mymy",
+                "iconUri": ""
+              },
+              {
+                "id": "9bb4070f-5146-4328-b24d-2153b3717b48",
+                "name": "method:GET",
+                "iconUri": ""
+              }
+            ],
+            "decisionStrategy": "UNANIMOUS"
+          }
         }
       ],
       "clientScopes": [

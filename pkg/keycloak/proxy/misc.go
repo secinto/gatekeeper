@@ -29,6 +29,7 @@ import (
 	"github.com/Nerzal/gocloak/v12"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
+	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -138,15 +139,9 @@ func (r *OauthProxy) redirectToURL(url string, wrt http.ResponseWriter, req *htt
 
 // redirectToAuthorization redirects the user to authorization handler
 func (r *OauthProxy) redirectToAuthorization(wrt http.ResponseWriter, req *http.Request) context.Context {
-	if r.Config.NoRedirects && !r.Config.EnableUma {
+	if r.Config.NoRedirects {
 		wrt.WriteHeader(http.StatusUnauthorized)
 		return r.revokeProxy(wrt, req)
-	}
-
-	if r.Config.EnableUma {
-		if v := r.redirectToAuthorizationUMA(wrt, req); v != nil {
-			return v
-		}
 	}
 
 	// step: add a state referrer to the authorization page
@@ -184,6 +179,8 @@ func (r *OauthProxy) redirectToAuthorization(wrt http.ResponseWriter, req *http.
 			url,
 		)
 	}
+
+	r.Log.Debug("redirecting to url", zap.String("url", url))
 
 	r.redirectToURL(
 		url,
@@ -224,107 +221,6 @@ func (r *OauthProxy) GetAccessCookieExpiration(refresh string) time.Duration {
 	}
 
 	return duration
-}
-
-func (r *OauthProxy) redirectToAuthorizationUMA(wrt http.ResponseWriter, req *http.Request) context.Context {
-	ctx, cancel := context.WithTimeout(
-		context.Background(),
-		r.Config.OpenIDProviderTimeout,
-	)
-
-	defer cancel()
-
-	matchingURI := true
-
-	resourceParam := gocloak.GetResourceParams{
-		URI:         &req.URL.Path,
-		MatchingURI: &matchingURI,
-	}
-
-	r.pat.m.Lock()
-	token := r.pat.Token.AccessToken
-	r.pat.m.Unlock()
-
-	resources, err := r.IdpClient.GetResourcesClient(
-		ctx,
-		token,
-		r.Config.Realm,
-		resourceParam,
-	)
-
-	if err != nil {
-		r.Log.Error(
-			"problem getting resources for path",
-			zap.String("path", req.URL.Path),
-			zap.Error(err),
-		)
-		wrt.WriteHeader(http.StatusUnauthorized)
-		return r.revokeProxy(wrt, req)
-	}
-
-	if len(resources) == 0 {
-		r.Log.Info(
-			"no resources for path",
-			zap.String("path", req.URL.Path),
-		)
-		wrt.WriteHeader(http.StatusUnauthorized)
-		return r.revokeProxy(wrt, req)
-	}
-
-	resourceID := resources[0].ID
-	resourceScopes := make([]string, 0)
-
-	if len(*resources[0].ResourceScopes) == 0 {
-		r.Log.Error(
-			"missingg scopes for resource in IDP provider",
-			zap.String("resourceID", *resourceID),
-		)
-		wrt.WriteHeader(http.StatusUnauthorized)
-		return r.revokeProxy(wrt, req)
-	}
-
-	for _, scope := range *resources[0].ResourceScopes {
-		resourceScopes = append(resourceScopes, *scope.Name)
-	}
-
-	if r.Config.NoRedirects {
-		permissions := []gocloak.CreatePermissionTicketParams{
-			{
-				ResourceID:     resourceID,
-				ResourceScopes: &resourceScopes,
-			},
-		}
-
-		permTicket, err := r.IdpClient.CreatePermissionTicket(
-			ctx,
-			token,
-			r.Config.Realm,
-			permissions,
-		)
-
-		if err != nil {
-			r.Log.Error(
-				"problem getting permission ticket for resourceId",
-				zap.String("resourceID", *resourceID),
-				zap.Error(err),
-			)
-			wrt.WriteHeader(http.StatusUnauthorized)
-			return r.revokeProxy(wrt, req)
-		}
-
-		permHeader := fmt.Sprintf(
-			`realm="%s", as_uri="%s", ticket="%s"`,
-			r.Config.Realm,
-			r.Config.DiscoveryURI.Host,
-			*permTicket.Ticket,
-		)
-
-		wrt.Header().Add("WWW-Authenticate", permHeader)
-		wrt.WriteHeader(http.StatusUnauthorized)
-		return r.revokeProxy(wrt, req)
-	}
-
-	return nil
 }
 
 //nolint:cyclop
@@ -388,11 +284,7 @@ func (r *OauthProxy) getPAT(done chan bool) {
 
 		if err != nil {
 			retry++
-			r.Log.Error(
-				"problem getting PAT token",
-
-				zap.Error(err),
-			)
+			r.Log.Error("problem getting PAT token", zap.Error(err))
 
 			if retry >= patRetryCount {
 				cancel()
@@ -448,7 +340,12 @@ func (r *OauthProxy) getPAT(done chan bool) {
 }
 
 // getRPT retrieves relaying party token
-func (r *OauthProxy) getRPT(req *http.Request, resp *http.Response) *gocloak.JWT {
+func (r *OauthProxy) getRPT(
+	req *http.Request,
+	targetPath string,
+	userToken string,
+	methodScope *string,
+) (*gocloak.JWT, error) {
 	ctx, cancel := context.WithTimeout(
 		context.Background(),
 		r.Config.OpenIDProviderTimeout,
@@ -457,15 +354,15 @@ func (r *OauthProxy) getRPT(req *http.Request, resp *http.Response) *gocloak.JWT
 	defer cancel()
 
 	matchingURI := true
-
 	resourceParam := gocloak.GetResourceParams{
-		URI:         &req.URL.Path,
+		URI:         &targetPath,
 		MatchingURI: &matchingURI,
+		Scope:       methodScope,
 	}
 
-	r.pat.m.Lock()
+	r.pat.m.RLock()
 	pat := r.pat.Token.AccessToken
-	r.pat.m.Unlock()
+	r.pat.m.RUnlock()
 
 	resources, err := r.IdpClient.GetResourcesClient(
 		ctx,
@@ -475,31 +372,26 @@ func (r *OauthProxy) getRPT(req *http.Request, resp *http.Response) *gocloak.JWT
 	)
 
 	if err != nil {
-		r.Log.Error(
-			"problem getting resources for path",
-			zap.String("path", req.URL.Path),
-			zap.Error(err),
+		return nil, fmt.Errorf(
+			"%s %s",
+			apperrors.ErrNoIDPResourceForPath.Error(),
+			err,
 		)
-		return nil
 	}
 
 	if len(resources) == 0 {
-		r.Log.Info(
-			"no resources for path",
-			zap.String("path", req.URL.Path),
-		)
-		return nil
+		return nil, apperrors.ErrNoIDPResourceForPath
 	}
 
 	resourceID := resources[0].ID
 	resourceScopes := make([]string, 0)
 
 	if len(*resources[0].ResourceScopes) == 0 {
-		r.Log.Error(
-			"missing scopes for resource in IDP provider",
-			zap.String("resourceID", *resourceID),
+		return nil, fmt.Errorf(
+			"%w, resource: %s",
+			apperrors.ErrMissingScopesForResource,
+			*resourceID,
 		)
-		return nil
 	}
 
 	for _, scope := range *resources[0].ResourceScopes {
@@ -521,12 +413,12 @@ func (r *OauthProxy) getRPT(req *http.Request, resp *http.Response) *gocloak.JWT
 	)
 
 	if err != nil {
-		r.Log.Error(
-			"problem getting permission ticket for resourceId",
-			zap.String("resourceID", *resourceID),
-			zap.Error(err),
+		return nil, fmt.Errorf(
+			"%s resource: %s %w",
+			apperrors.ErrPermissionTicketForResourceID.Error(),
+			*resourceID,
+			err,
 		)
-		return nil
 	}
 
 	grantType := configcore.GrantTypeUmaTicket
@@ -536,18 +428,22 @@ func (r *OauthProxy) getRPT(req *http.Request, resp *http.Response) *gocloak.JWT
 		Ticket:    permTicket.Ticket,
 	}
 
-	rpt, err := r.IdpClient.GetRequestingPartyToken(ctx, pat, r.Config.Realm, rptOptions)
-
-	if err != nil {
-		r.Log.Error(
-			"problem getting RPT for resource (hint: do you have permissions assigned to resource?)",
-			zap.String("resourceID", *resourceID),
-			zap.Error(err),
-		)
-		return nil
+	if userToken == "" {
+		userToken = pat
 	}
 
-	return rpt
+	rpt, err := r.IdpClient.GetRequestingPartyToken(ctx, userToken, r.Config.Realm, rptOptions)
+
+	if err != nil {
+		return nil, fmt.Errorf(
+			"%s resource: %s %w",
+			apperrors.ErrRetrieveRPT.Error(),
+			*resourceID,
+			err,
+		)
+	}
+
+	return rpt, nil
 }
 
 func (r *OauthProxy) getCodeFlowTokens(
@@ -599,6 +495,40 @@ func (r *OauthProxy) getCodeFlowTokens(
 	}
 
 	return resp.AccessToken, idToken, resp.RefreshToken, nil
+}
+
+func (r *OauthProxy) verifyUmaToken(
+	accessUserCtx *UserContext,
+	umaUserCtx *UserContext,
+	writer http.ResponseWriter,
+	req *http.Request,
+) error {
+	// make sure somebody doesn't sent one user access token
+	// and others user valid uma token in one request
+	if umaUserCtx.ID != accessUserCtx.ID {
+		return apperrors.ErrAccessMismatchUmaToken
+	}
+
+	verifier := r.Provider.Verifier(
+		&oidc3.Config{
+			ClientID:          r.Config.ClientID,
+			SkipClientIDCheck: r.Config.SkipAccessTokenClientIDCheck,
+			SkipIssuerCheck:   r.Config.SkipAccessTokenIssuerCheck,
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(req.Context(), r.Config.OpenIDProviderTimeout)
+	defer cancel()
+
+	_, err := verifier.Verify(ctx, umaUserCtx.RawToken)
+	if err != nil {
+		if strings.Contains(err.Error(), "token is expired") {
+			return apperrors.ErrUMATokenExpired
+		}
+		return fmt.Errorf("%s %w", apperrors.ErrTokenVerificationFailure.Error(), err)
+	}
+
+	return nil
 }
 
 func (r *OauthProxy) verifyOIDCTokens(
@@ -777,4 +707,48 @@ func (r *OauthProxy) getRequestURIFromCookie(
 	}
 
 	return string(decoded)
+}
+
+func (r *OauthProxy) WithCodeFlowUMA(
+	req *http.Request,
+	wrt http.ResponseWriter,
+	user *UserContext,
+	authzFunc func(req *http.Request, userPerms authorization.Permissions) (authorization.AuthzDecision, error),
+) (authorization.AuthzDecision, error) {
+	umaUser, err := r.GetUmaIdentity(req)
+	if err != nil {
+		return authorization.DeniedAuthz,
+			fmt.Errorf("%w %s", apperrors.ErrGetIdentityFromUMA, err.Error())
+	}
+
+	err = r.verifyUmaToken(user, umaUser, wrt, req)
+	if err != nil {
+		return authorization.DeniedAuthz, err
+	}
+
+	return authzFunc(req, umaUser.Permissions)
+}
+
+func (r *OauthProxy) refreshUmaToken(
+	req *http.Request,
+	user *UserContext,
+	methodScope *string,
+) (*UserContext, error) {
+	tok, err := r.getRPT(req, req.URL.Path, user.RawToken, methodScope)
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := jwt.ParseSigned(tok.AccessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	umaUser, err := ExtractIdentity(token)
+	if err != nil {
+		return nil, err
+	}
+
+	umaUser.RawToken = tok.AccessToken
+	return umaUser, nil
 }

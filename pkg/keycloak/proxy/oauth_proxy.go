@@ -22,7 +22,7 @@ import (
 
 type PAT struct {
 	Token *gocloak.JWT
-	m     sync.Mutex
+	m     sync.RWMutex
 }
 
 // reverseProxy is a wrapper

@@ -111,16 +111,21 @@ func (r *OauthProxy) forwardProxyHandler() func(*http.Request, *http.Response) {
 		var token string
 
 		if r.Config.EnableUma {
-			tk := r.getRPT(req, resp)
-			if tk != nil {
-				token = tk.AccessToken
-			} else {
+			var methodScope string
+			if r.Config.EnableUmaMethodScope {
+				methodScope = "method:" + req.Method
+			}
+
+			tok, err := r.getRPT(req, req.URL.Path, "", &methodScope)
+			if err != nil {
+				r.Log.Error("", zap.Error(err))
 				return
 			}
+			token = tok.AccessToken
 		} else {
-			r.pat.m.Lock()
+			r.pat.m.RLock()
 			token = r.pat.Token.AccessToken
-			r.pat.m.Unlock()
+			r.pat.m.RUnlock()
 		}
 
 		hostname := req.Host

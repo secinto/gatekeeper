@@ -128,19 +128,24 @@ func (r *OauthProxy) dropCookieWithChunks(req *http.Request, wrt http.ResponseWr
 	}
 }
 
-// dropAccessTokenCookie drops a access token cookie from the response
+// dropAccessTokenCookie drops a access token cookie
 func (r *OauthProxy) dropAccessTokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
 	r.dropCookieWithChunks(req, w, r.Config.CookieAccessName, value, duration)
 }
 
-// DropRefreshTokenCookie drops a refresh token cookie from the response
+// DropRefreshTokenCookie drops a refresh token cookie
 func (r *OauthProxy) DropRefreshTokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
 	r.dropCookieWithChunks(req, w, r.Config.CookieRefreshName, value, duration)
 }
 
-// dropIdTokenCookie drops a id token cookie from the response
+// dropIdTokenCookie drops a id token cookie
 func (r *OauthProxy) dropIDTokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
 	r.dropCookieWithChunks(req, w, r.Config.CookieIDTokenName, value, duration)
+}
+
+// dropUMATokenCookie drops a uma token cookie
+func (r *OauthProxy) dropUMATokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
+	r.dropCookieWithChunks(req, w, r.Config.CookieUMAName, value, duration)
 }
 
 // writeStateParameterCookie sets a state parameter cookie into the response
@@ -176,70 +181,46 @@ func (r *OauthProxy) ClearAllCookies(req *http.Request, w http.ResponseWriter) {
 	r.ClearAccessTokenCookie(req, w)
 	r.ClearRefreshTokenCookie(req, w)
 	r.ClearIDTokenCookie(req, w)
+	r.ClearUMATokenCookie(req, w)
+}
+
+func (r *OauthProxy) ClearCookie(req *http.Request, wrt http.ResponseWriter, name string) {
+	r.DropCookie(wrt, req.Host, name, "", -10*time.Hour)
+
+	// clear divided cookies
+	for idx := 1; idx < 600; idx++ {
+		var _, err = req.Cookie(name + "-" + strconv.Itoa(idx))
+
+		if err == nil {
+			r.DropCookie(
+				wrt,
+				req.Host,
+				name+"-"+strconv.Itoa(idx),
+				"",
+				-10*time.Hour,
+			)
+		} else {
+			break
+		}
+	}
 }
 
 // clearRefreshSessionCookie clears the session cookie
 func (r *OauthProxy) ClearRefreshTokenCookie(req *http.Request, wrt http.ResponseWriter) {
-	r.DropCookie(wrt, req.Host, r.Config.CookieRefreshName, "", -10*time.Hour)
-
-	// clear divided cookies
-	for idx := 1; idx < 600; idx++ {
-		var _, err = req.Cookie(r.Config.CookieRefreshName + "-" + strconv.Itoa(idx))
-
-		if err == nil {
-			r.DropCookie(
-				wrt,
-				req.Host,
-				r.Config.CookieRefreshName+"-"+strconv.Itoa(idx),
-				"",
-				-10*time.Hour,
-			)
-		} else {
-			break
-		}
-	}
+	r.ClearCookie(req, wrt, r.Config.CookieRefreshName)
 }
 
 // ClearAccessTokenCookie clears the session cookie
 func (r *OauthProxy) ClearAccessTokenCookie(req *http.Request, wrt http.ResponseWriter) {
-	r.DropCookie(wrt, req.Host, r.Config.CookieAccessName, "", -10*time.Hour)
-
-	// clear divided cookies
-	for idx := 1; idx < len(req.Cookies()); idx++ {
-		var _, err = req.Cookie(r.Config.CookieAccessName + "-" + strconv.Itoa(idx))
-
-		if err == nil {
-			r.DropCookie(
-				wrt,
-				req.Host,
-				r.Config.CookieAccessName+"-"+strconv.Itoa(idx),
-				"",
-				-10*time.Hour,
-			)
-		} else {
-			break
-		}
-	}
+	r.ClearCookie(req, wrt, r.Config.CookieAccessName)
 }
 
 // ClearIDTokenCookie clears the session cookie
 func (r *OauthProxy) ClearIDTokenCookie(req *http.Request, wrt http.ResponseWriter) {
-	r.DropCookie(wrt, req.Host, r.Config.CookieIDTokenName, "", -10*time.Hour)
+	r.ClearCookie(req, wrt, r.Config.CookieIDTokenName)
+}
 
-	// clear divided cookies
-	for idx := 1; idx < len(req.Cookies()); idx++ {
-		var _, err = req.Cookie(r.Config.CookieIDTokenName + "-" + strconv.Itoa(idx))
-
-		if err == nil {
-			r.DropCookie(
-				wrt,
-				req.Host,
-				r.Config.CookieIDTokenName+"-"+strconv.Itoa(idx),
-				"",
-				-10*time.Hour,
-			)
-		} else {
-			break
-		}
-	}
+// ClearUMATokenCookie clears the session cookie
+func (r *OauthProxy) ClearUMATokenCookie(req *http.Request, wrt http.ResponseWriter) {
+	r.ClearCookie(req, wrt, r.Config.CookieUMAName)
 }

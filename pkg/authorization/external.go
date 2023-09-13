@@ -1,27 +1,27 @@
 package authorization
 
-import (
-	"strconv"
-)
-
 type AuthzDecision int
 
 const (
 	UndefinedAuthz AuthzDecision = iota
 	AllowedAuthz   AuthzDecision = iota
 	DeniedAuthz    AuthzDecision = iota
+
+	DeniedAuthzString    string = "Denied"
+	AllowedAuthzString   string = "Allowed"
+	UndefinedAuthzString string = "Undefined"
 )
 
 func (decision AuthzDecision) String() string {
 	switch decision {
 	case AllowedAuthz:
-		return strconv.Itoa(int(AllowedAuthz))
+		return AllowedAuthzString
 	case DeniedAuthz:
-		return strconv.Itoa(int(DeniedAuthz))
+		return DeniedAuthzString
 	case UndefinedAuthz:
-		return ""
+		return UndefinedAuthzString
 	}
-	return strconv.Itoa(int(DeniedAuthz))
+	return DeniedAuthzString
 }
 
 type Provider interface {

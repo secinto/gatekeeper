@@ -123,6 +123,8 @@ func (r *OauthProxy) loggingMiddleware(next http.Handler) http.Handler {
 		if r.Config.Verbose {
 			requestLogger := r.Log.With(
 				zap.Any("headers", req.Header),
+				zap.String("path", req.URL.Path),
+				zap.String("method", req.Method),
 			)
 			scope.Logger = requestLogger
 		}
@@ -171,6 +173,8 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 			}
 
 			clientIP := utils.RealIP(req)
+
+			scope.Logger.Debug("authentication middleware")
 
 			// grab the user identity from the request
 			user, err := r.GetIdentity(req)
@@ -434,18 +438,18 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 }
 
 /*
-	authorizationMiddleware is responsible for verifying permissions in access_token
+	authorizationMiddleware is responsible for verifying permissions in access_token/uma_token
+	in case of Bearer auth we are using uma_token in Bearer header, which is already extracted
+	in authenticationMiddleware and present in user identity, in case of code flow
+	we have separate uma_token cookie and we need to extract/verify/refresh it here
 */
 //nolint:cyclop
 func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
-
 			if !assertOk {
-				r.Log.Error(
-					"assertion failed",
-				)
+				r.Log.Error("assertion failed")
 				return
 			}
 
@@ -454,49 +458,74 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 				return
 			}
 
-			user := scope.Identity
-			noAuthz := false
+			scope.Logger.Debug("authorization middleware")
 
+			user := scope.Identity
+			userPerms := user.Permissions
+			var provider authorization.Provider
 			var decision authorization.AuthzDecision
 			var err error
 
-			if r.useStore() {
-				scope.Logger.Debug("checking if authz decision in cache")
-				decision, err = r.GetAuthz(user.RawToken, req.URL)
-				noAuthz = err == apperrors.ErrNoAuthzFound
-			}
+			scope.Logger.Debug("query external authz provider for authz")
 
-			decFromCache := !noAuthz && r.useStore()
+			if r.Config.EnableUma {
+				var methodScope string
+				if r.Config.EnableUmaMethodScope {
+					methodScope = "method:" + req.Method
+				}
 
-			if decFromCache {
-				scope.Logger.Debug("authz decision found in cache")
-			}
-
-			if !r.useStore() || noAuthz {
-				var provider authorization.Provider
-
-				scope.Logger.Debug("query external authz provider for authz")
-
-				if r.Config.EnableUma {
-					r.pat.m.Lock()
+				authzFunc := func(
+					req *http.Request,
+					userPerms authorization.Permissions,
+				) (authorization.AuthzDecision, error) {
+					r.pat.m.RLock()
 					token := r.pat.Token.AccessToken
-					r.pat.m.Unlock()
+					r.pat.m.RUnlock()
 
 					provider = authorization.NewKeycloakAuthorizationProvider(
-						user.Permissions,
+						userPerms,
 						req,
 						r.IdpClient,
 						r.Config.OpenIDProviderTimeout,
 						token,
 						r.Config.Realm,
+						&methodScope,
 					)
-				} else if r.Config.EnableOpa {
-					provider = authorization.NewOpaAuthorizationProvider(
-						r.Config.OpaTimeout,
-						*r.Config.OpaAuthzURL,
-						req,
-					)
+
+					return provider.Authorize()
 				}
+
+				if !r.Config.NoRedirects {
+					//nolint:contextcheck
+					decision, err = r.WithCodeFlowUMA(req, wrt, user, authzFunc)
+					if err != nil {
+						var umaUser *UserContext
+
+						scope.Logger.Error(err.Error())
+						scope.Logger.Info("trying to get new uma token")
+
+						//nolint:contextcheck
+						umaUser, err = r.refreshUmaToken(req, user, &methodScope)
+						if err != nil {
+							scope.Logger.Error(err.Error())
+							//nolint:contextcheck
+							next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+							return
+						}
+
+						r.dropUMATokenCookie(req, wrt, umaUser.RawToken, time.Until(umaUser.ExpiresAt))
+						scope.Logger.Debug("got uma token")
+						decision, err = authzFunc(req, umaUser.Permissions)
+					}
+				} else {
+					decision, err = authzFunc(req, userPerms)
+				}
+			} else if r.Config.EnableOpa {
+				provider = authorization.NewOpaAuthorizationProvider(
+					r.Config.OpaTimeout,
+					*r.Config.OpaAuthzURL,
+					req,
+				)
 				decision, err = provider.Authorize()
 			}
 
@@ -514,49 +543,18 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 			case apperrors.ErrNoAuthzFound:
 			default:
 				if err != nil {
-					scope.Logger.Error(
-						"Undexpected error during authorization",
-						zap.Error(err),
-					)
-
-					r.accessForbidden(wrt, req)
+					scope.Logger.Error("Undexpected error during authorization", zap.Error(err))
+					//nolint:contextcheck
+					next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
 					return
 				}
 			}
 
-			if noAuthz {
-				scope.Logger.Debug("storing authz decision in cache")
-
-				err := r.StoreAuthz(
-					user.RawToken,
-					req.URL,
-					decision,
-					time.Until(user.ExpiresAt),
-				)
-
-				if err != nil {
-					scope.Logger.Error(
-						"problem setting authz decision to store",
-						zap.Error(err),
-					)
-				}
-			}
-
-			scope.Logger.Info(
-				"authz decision",
-				zap.String("decision", decision.String()),
-			)
+			scope.Logger.Info("authz decision", zap.String("decision", decision.String()))
 
 			if decision == authorization.DeniedAuthz {
-				if decFromCache {
-					scope.Logger.Debug(
-						"authz denied from cache",
-						zap.String("user", user.Name),
-						zap.String("path", req.URL.Path),
-					)
-				}
-
-				r.accessForbidden(wrt, req)
+				//nolint:contextcheck
+				next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
 				return
 			}
 

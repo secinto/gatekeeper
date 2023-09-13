@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -342,6 +341,7 @@ func TestUmaForwardingProxy(t *testing.T) {
 	fakeUpstream := httptest.NewServer(&FakeUpstreamService{})
 	upstreamConfig := newFakeKeycloakConfig()
 	upstreamConfig.EnableUma = true
+	upstreamConfig.NoRedirects = true
 	upstreamConfig.EnableDefaultDeny = true
 	upstreamConfig.ClientID = ValidUsername
 	upstreamConfig.ClientSecret = ValidPassword
@@ -1926,132 +1926,6 @@ func TestStoreAuthz(t *testing.T) {
 
 					if decision != authorization.AllowedAuthz.String() {
 						t.Fatalf("bad decision stored, expected allowed, got %v", decision)
-					}
-				}
-			},
-		)
-	}
-}
-
-//nolint:cyclop
-func TestGetAuthz(t *testing.T) {
-	cfg := newFakeKeycloakConfig()
-	token := newTestToken("http://test")
-	jwt, err := token.getToken()
-
-	if err != nil {
-		t.Fatal("Testing token generation failed")
-	}
-
-	tests := []struct {
-		Name            string
-		ProxySettings   func(c *config.Config)
-		JWT             string
-		ExpectedFailure bool
-	}{
-		{
-			Name: "TestEntryInStore",
-			ProxySettings: func(conf *config.Config) {
-				redisServer, err := miniredis.Run()
-
-				if err != nil {
-					t.Fatalf("Starting redis failed %s", err)
-				}
-
-				conf.StoreURL = fmt.Sprintf("redis://%s", redisServer.Addr())
-			},
-			JWT: jwt,
-		},
-		{
-			Name: "TestZeroLengthToken",
-			ProxySettings: func(conf *config.Config) {
-				redisServer, err := miniredis.Run()
-
-				if err != nil {
-					t.Fatalf("Starting redis failed %s", err)
-				}
-
-				conf.StoreURL = fmt.Sprintf("redis://%s", redisServer.Addr())
-			},
-			JWT:             "",
-			ExpectedFailure: true,
-		},
-		{
-			Name: "TestEmptyResponse",
-			ProxySettings: func(conf *config.Config) {
-				redisServer, err := miniredis.Run()
-
-				if err != nil {
-					t.Fatalf("Starting redis failed %s", err)
-				}
-
-				conf.StoreURL = fmt.Sprintf("redis://%s", redisServer.Addr())
-			},
-			JWT:             jwt,
-			ExpectedFailure: true,
-		},
-		{
-			Name: "TestFailedStore",
-			ProxySettings: func(conf *config.Config) {
-				_, err := miniredis.Run()
-
-				if err != nil {
-					t.Fatalf("Starting redis failed %s", err)
-				}
-
-				conf.StoreURL = fmt.Sprintf("redis://%s", "failed:65000")
-			},
-			JWT:             jwt,
-			ExpectedFailure: true,
-		},
-	}
-
-	for _, testCase := range tests {
-		testCase := testCase
-		cfg := *cfg
-		t.Run(
-			testCase.Name,
-			func(t *testing.T) {
-				testCase.ProxySettings(&cfg)
-				fProxy := newFakeProxy(&cfg, &fakeAuthConfig{})
-
-				url, err := url.Parse("http://test.com/test")
-
-				if err != nil {
-					t.Fatal("Problem parsing url")
-				}
-
-				if !testCase.ExpectedFailure {
-					err = fProxy.proxy.StoreAuthz(testCase.JWT, url, authorization.AllowedAuthz, 1*time.Second)
-
-					if err != nil {
-						t.Fatalf("error storing authz %s", err)
-					}
-				}
-
-				dec, err := fProxy.proxy.GetAuthz(testCase.JWT, url)
-
-				if err != nil {
-					if !testCase.ExpectedFailure {
-						t.Fatalf("error getting authz %s", err)
-					}
-
-					if dec != authorization.DeniedAuthz {
-						t.Fatalf("expected undefined authz decision, got %s", dec)
-					}
-
-					if testCase.JWT == "" && err != apperrors.ErrZeroLengthToken {
-						t.Fatalf("expected error %s, got %s", apperrors.ErrZeroLengthToken, err)
-					}
-
-					if testCase.JWT != "" && err != apperrors.ErrNoAuthzFound && !strings.Contains(cfg.StoreURL, "failed") {
-						t.Fatalf("expected error %s, got %s", apperrors.ErrNoAuthzFound, err)
-					}
-				}
-
-				if !testCase.ExpectedFailure {
-					if dec != authorization.AllowedAuthz {
-						t.Fatalf("bad decision stored, expected allowed, got %s", dec)
 					}
 				}
 			},

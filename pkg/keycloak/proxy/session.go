@@ -70,3 +70,45 @@ func (r *OauthProxy) GetIdentity(req *http.Request) (*UserContext, error) {
 
 	return user, nil
 }
+
+// GetUmaIdentity retrieves UMA token from a request, from a session cookie
+func (r *OauthProxy) GetUmaIdentity(req *http.Request) (*UserContext, error) {
+	umaToken, _, err := utils.GetTokenInRequest(
+		req,
+		r.Config.CookieUMAName,
+		r.Config.SkipAuthorizationHeaderIdentity,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
+		if umaToken, err = encryption.DecodeText(umaToken, r.Config.EncryptionKey); err != nil {
+			return nil, apperrors.ErrDecryption
+		}
+	}
+
+	rawToken := umaToken
+	token, err := jwt.ParseSigned(umaToken)
+
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := ExtractIdentity(token)
+	if err != nil {
+		return nil, err
+	}
+
+	user.RawToken = rawToken
+
+	r.Log.Debug("found the user identity",
+		zap.String("id", user.ID),
+		zap.String("name", user.Name),
+		zap.String("email", user.Email),
+		zap.String("roles", strings.Join(user.Roles, ",")),
+		zap.String("groups", strings.Join(user.Groups, ",")))
+
+	return user, nil
+}

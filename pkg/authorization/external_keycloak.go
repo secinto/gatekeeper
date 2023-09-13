@@ -22,12 +22,13 @@ type Permissions struct {
 var _ Provider = (*KeycloakAuthorizationProvider)(nil)
 
 type KeycloakAuthorizationProvider struct {
-	perms      Permissions
-	req        *http.Request
-	idpClient  *gocloak.GoCloak
-	idpTimeout time.Duration
-	pat        string
-	realm      string
+	perms       Permissions
+	req         *http.Request
+	idpClient   *gocloak.GoCloak
+	idpTimeout  time.Duration
+	pat         string
+	realm       string
+	methodScope *string
 }
 
 func NewKeycloakAuthorizationProvider(
@@ -37,14 +38,16 @@ func NewKeycloakAuthorizationProvider(
 	idpTimeout time.Duration,
 	PAT string,
 	realm string,
+	methodScope *string,
 ) Provider {
 	return &KeycloakAuthorizationProvider{
-		perms:      perms,
-		req:        req,
-		idpClient:  idpClient,
-		idpTimeout: idpTimeout,
-		pat:        PAT,
-		realm:      realm,
+		perms:       perms,
+		req:         req,
+		idpClient:   idpClient,
+		idpTimeout:  idpTimeout,
+		pat:         PAT,
+		realm:       realm,
+		methodScope: methodScope,
 	}
 }
 
@@ -61,10 +64,10 @@ func (p *KeycloakAuthorizationProvider) Authorize() (AuthzDecision, error) {
 	defer cancel()
 
 	matchingURI := true
-
 	resourceParam := gocloak.GetResourceParams{
 		URI:         &p.req.URL.Path,
 		MatchingURI: &matchingURI,
+		Scope:       p.methodScope,
 	}
 
 	resources, err := p.idpClient.GetResourcesClient(

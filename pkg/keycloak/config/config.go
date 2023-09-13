@@ -178,6 +178,8 @@ type Config struct {
 	CookieRequestURIName string `json:"cookie-request-uri-name" yaml:"cookie-request-uri-name" usage:"name of the cookie used to hold the request uri" env:"COOKIE_REQUEST_URI_NAME"`
 	// CookiePKCEName is the name of PKCE code verifier cookie
 	CookiePKCEName string `json:"cookie-pkce-name" yaml:"cookie-pkce-name" usage:"name of the cookie used to hold PKCE code verifier" env:"COOKIE_PKCE_NAME"`
+	// CookieUMAName string is the name of cookie for RPT token
+	CookieUMAName string `json:"cookie-uma-name" yaml:"cookie-uma-name" usage:"name of the cookie used to hold the UMA RPT token" env:"COOKIE_UMA_NAME"`
 	// SecureCookie enforces the cookie as secure
 	SecureCookie bool `json:"secure-cookie" yaml:"secure-cookie" usage:"enforces the cookie to be secure" env:"SECURE_COOKIE"`
 	// HTTPOnlyCookie enforces the cookie as http only
@@ -189,6 +191,8 @@ type Config struct {
 	MatchClaims map[string]string `json:"match-claims" yaml:"match-claims" usage:"keypair values for matching access token claims e.g. aud=myapp, iss=http://example.*"`
 	// AddClaims is a series of claims that should be added to the auth headers
 	AddClaims []string `json:"add-claims" yaml:"add-claims" usage:"extra claims from the token and inject into headers, e.g given_name -> X-Auth-Given-Name"`
+	// EnableUmaMethodScope enables passing request method as "method:GET" scope to keycloak for authorization
+	EnableUmaMethodScope bool `json:"enable-uma-method-scope" yaml:"enable-uma-method-scope" usage:"enables passing request method as 'method:GET' scope to keycloak for authorization" env:"ENABLE_UMA_METHOD_SCOPE"`
 
 	// TLSCertificate is the location for a tls certificate
 	TLSCertificate string `json:"tls-cert" yaml:"tls-cert" usage:"path to ths TLS certificate" env:"TLS_CERTIFICATE"`
@@ -324,6 +328,7 @@ func NewDefaultConfig() *Config {
 		CookieOAuthStateName:          constant.RequestStateCookie,
 		CookieRequestURIName:          constant.RequestURICookie,
 		CookiePKCEName:                constant.PKCECookie,
+		CookieUMAName:                 constant.UMACookie,
 		EnableAuthorizationCookies:    true,
 		EnableAuthorizationHeader:     true,
 		EnableDefaultDeny:             true,
@@ -760,9 +765,11 @@ func (r *Config) isForwardingGrantValid() error {
 		if r.ForwardingUsername == "" {
 			return errors.New("no forwarding username")
 		}
-
 		if r.ForwardingPassword == "" {
 			return errors.New("no forwarding password")
+		}
+		if r.EnableUma {
+			return errors.New("cannot use direct access grant with UMA")
 		}
 	}
 
@@ -915,11 +922,6 @@ func (r *Config) isExternalAuthzValid() error {
 		if r.ClientID == "" || r.ClientSecret == "" {
 			return errors.New(
 				"enable uma requires client credentials",
-			)
-		}
-		if !r.NoRedirects {
-			return errors.New(
-				"enable-uma requires no-redirects option",
 			)
 		}
 	} else if r.EnableOpa {
