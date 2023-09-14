@@ -177,7 +177,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 			scope.Logger.Debug("authentication middleware")
 
 			// grab the user identity from the request
-			user, err := r.GetIdentity(req)
+			user, err := r.GetIdentity(req, r.Config.CookieAccessName, "")
 
 			if err != nil {
 				scope.Logger.Error(
@@ -439,9 +439,6 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 
 /*
 	authorizationMiddleware is responsible for verifying permissions in access_token/uma_token
-	in case of Bearer auth we are using uma_token in Bearer header, which is already extracted
-	in authenticationMiddleware and present in user identity, in case of code flow
-	we have separate uma_token cookie and we need to extract/verify/refresh it here
 */
 //nolint:cyclop
 func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
@@ -461,7 +458,6 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 			scope.Logger.Debug("authorization middleware")
 
 			user := scope.Identity
-			userPerms := user.Permissions
 			var provider authorization.Provider
 			var decision authorization.AuthzDecision
 			var err error
@@ -481,7 +477,6 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					r.pat.m.RLock()
 					token := r.pat.Token.AccessToken
 					r.pat.m.RUnlock()
-
 					provider = authorization.NewKeycloakAuthorizationProvider(
 						userPerms,
 						req,
@@ -491,34 +486,39 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 						r.Config.Realm,
 						&methodScope,
 					)
-
 					return provider.Authorize()
 				}
 
-				if !r.Config.NoRedirects {
+				//nolint:contextcheck
+				decision, err = r.WithUMAIdentity(req, wrt, user, authzFunc)
+				if err != nil {
+					var umaUser *UserContext
+					scope.Logger.Error(err.Error())
+					scope.Logger.Info("trying to get new uma token")
+
 					//nolint:contextcheck
-					decision, err = r.WithCodeFlowUMA(req, wrt, user, authzFunc)
+					umaUser, err = r.refreshUmaToken(req, user, &methodScope)
 					if err != nil {
-						var umaUser *UserContext
-
 						scope.Logger.Error(err.Error())
-						scope.Logger.Info("trying to get new uma token")
-
 						//nolint:contextcheck
-						umaUser, err = r.refreshUmaToken(req, user, &methodScope)
-						if err != nil {
+						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						return
+					}
+
+					umaToken := umaUser.RawToken
+					if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
+						if umaToken, err = encryption.EncodeText(umaToken, r.Config.EncryptionKey); err != nil {
 							scope.Logger.Error(err.Error())
 							//nolint:contextcheck
 							next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
 							return
 						}
-
-						r.dropUMATokenCookie(req, wrt, umaUser.RawToken, time.Until(umaUser.ExpiresAt))
-						scope.Logger.Debug("got uma token")
-						decision, err = authzFunc(req, umaUser.Permissions)
 					}
-				} else {
-					decision, err = authzFunc(req, userPerms)
+
+					r.dropUMATokenCookie(req, wrt, umaToken, time.Until(umaUser.ExpiresAt))
+					wrt.Header().Set(constant.UMAHeader, umaToken)
+					scope.Logger.Debug("got uma token")
+					decision, err = authzFunc(req, umaUser.Permissions)
 				}
 			} else if r.Config.EnableOpa {
 				provider = authorization.NewOpaAuthorizationProvider(

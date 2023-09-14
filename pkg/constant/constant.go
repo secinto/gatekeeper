@@ -34,9 +34,12 @@ const (
 	PKCECookie         = "pkce"
 	IDTokenCookie      = "id_token"
 	UMACookie          = "uma_token"
-	UnsecureScheme     = "http"
-	SecureScheme       = "https"
-	AnyMethod          = "ANY"
+	// case is like this because go net package canonicalizes it
+	// to this form, see net package
+	UMAHeader      = "X-Uma-Token"
+	UnsecureScheme = "http"
+	SecureScheme   = "https"
+	AnyMethod      = "ANY"
 
 	_ contextKey = iota
 	ContextScopeName

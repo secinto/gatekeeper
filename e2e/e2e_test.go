@@ -355,6 +355,8 @@ var _ = Describe("UMA Code Flow authorization with method scope", func() {
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
 			"--secure-cookie=false",
+			"--verbose=true",
+			"--enable-logging=true",
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -389,7 +391,7 @@ var _ = Describe("UMA Code Flow authorization with method scope", func() {
 	})
 })
 
-var _ = Describe("UMA no-redirects authorization with forwarding", func() {
+var _ = Describe("UMA no-redirects authorization with forwarding client credentials grant", func() {
 	var portNum string
 	var proxyAddress string
 	var fwdPortNum string
@@ -422,8 +424,8 @@ var _ = Describe("UMA no-redirects authorization with forwarding", func() {
 			"--discovery-url=" + idpRealmURI,
 			"--openid-provider-timeout=120s",
 			"--listen=" + "0.0.0.0:" + fwdPortNum,
-			"--client-id=" + umaTestClient,
-			"--client-secret=" + umaTestClientSecret,
+			"--client-id=" + testClient,
+			"--client-secret=" + testClientSecret,
 			"--enable-uma=true",
 			"--enable-uma-method-scope=true",
 			"--enable-forwarding=true",
@@ -441,7 +443,7 @@ var _ = Describe("UMA no-redirects authorization with forwarding", func() {
 	})
 
 	When("Accessing resource, where user is allowed to access and then not allowed resource", func() {
-		It("should login with user/password, don't access forbidden resource", func(ctx context.Context) {
+		It("should login with client secret, don't access forbidden resource", func(ctx context.Context) {
 			rClient := resty.New().SetRedirectPolicy(resty.NoRedirectPolicy())
 			rClient.SetProxy(fwdProxyAddress)
 			resp, err := rClient.R().Get(proxyAddress + umaFwdMethodAllowedPath)
@@ -455,15 +457,110 @@ var _ = Describe("UMA no-redirects authorization with forwarding", func() {
 			resp, err = rClient.R().Get(proxyAddress + umaAllowedPath)
 			body = resp.Body()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.StatusCode()).To(Equal(http.StatusUnauthorized))
+			Expect(resp.StatusCode()).To(Equal(http.StatusForbidden))
 			Expect(strings.Contains(string(body), umaAllowedPath)).To(BeFalse())
 
 			By("Accessing not allowed method")
 			resp, err = rClient.R().Post(proxyAddress + umaFwdMethodAllowedPath)
 			body = resp.Body()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(resp.StatusCode()).To(Equal(http.StatusUnauthorized))
+			Expect(resp.StatusCode()).To(Equal(http.StatusForbidden))
 			Expect(strings.Contains(string(body), umaFwdMethodAllowedPath)).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("UMA no-redirects authorization with forwarding direct access grant", func() {
+	var portNum string
+	var proxyAddress string
+	var fwdPortNum string
+	var fwdProxyAddress string
+
+	BeforeEach(func() {
+		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
+		portNum = generateRandomPort()
+		fwdPortNum = generateRandomPort()
+		proxyAddress = "http://localhost:" + portNum
+		fwdProxyAddress = "http://localhost:" + fwdPortNum
+		osArgs := []string{os.Args[0]}
+		fwdOsArgs := []string{os.Args[0]}
+		proxyArgs := []string{
+			"--discovery-url=" + idpRealmURI,
+			"--openid-provider-timeout=120s",
+			"--listen=" + "0.0.0.0:" + portNum,
+			"--client-id=" + umaTestClient,
+			"--client-secret=" + umaTestClientSecret,
+			"--upstream-url=" + server.URL,
+			"--no-redirects=true",
+			"--enable-uma=true",
+			"--enable-uma-method-scope=true",
+			"--skip-access-token-clientid-check=true",
+			"--skip-access-token-issuer-check=true",
+			"--openid-provider-retry-count=30",
+		}
+
+		fwdProxyArgs := []string{
+			"--discovery-url=" + idpRealmURI,
+			"--openid-provider-timeout=120s",
+			"--listen=" + "0.0.0.0:" + fwdPortNum,
+			"--client-id=" + testClient,
+			"--client-secret=" + testClientSecret,
+			"--forwarding-username=" + testUser,
+			"--forwarding-password=" + testPass,
+			"--enable-uma=true",
+			"--enable-uma-method-scope=true",
+			"--enable-forwarding=true",
+			"--enable-authorization-header=true",
+			"--skip-access-token-clientid-check=true",
+			"--skip-access-token-issuer-check=true",
+			"--openid-provider-retry-count=30",
+		}
+
+		osArgs = append(osArgs, proxyArgs...)
+		startAndWait(portNum, osArgs)
+		fwdOsArgs = append(fwdOsArgs, fwdProxyArgs...)
+		startAndWait(fwdPortNum, fwdOsArgs)
+	})
+
+	When("Accessing resource, where user is allowed to access and then not allowed resource", func() {
+		It("should login with user/password, don't access forbidden resource", func(ctx context.Context) {
+			rClient := resty.New().SetRedirectPolicy(resty.NoRedirectPolicy())
+			rClient.SetProxy(fwdProxyAddress)
+			resp, err := rClient.R().Get(proxyAddress + umaMethodAllowedPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+
+			body := resp.Body()
+			Expect(strings.Contains(string(body), umaMethodAllowedPath)).To(BeTrue())
+			Expect(resp.Header().Get(constant.UMAHeader)).NotTo(BeEmpty())
+
+			By("Repeating access to allowed resource, we verify that uma was saved and reused")
+			resp, err = rClient.R().Get(proxyAddress + umaMethodAllowedPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+
+			body = resp.Body()
+			GinkgoLogr.Info(string(body))
+			Expect(strings.Contains(string(body), umaMethodAllowedPath)).To(BeTrue())
+			Expect(resp.Header().Get(constant.UMAHeader)).To(BeEmpty())
+			// as first request should return uma token in header, it should be
+			// saved in forwarding rpt structure and sent also in this request
+			// so we should see it in response body
+			Expect(strings.Contains(string(body), constant.UMAHeader)).To(BeTrue())
+
+			By("Accessing resource without access for user")
+			resp, err = rClient.R().Get(proxyAddress + umaForbiddenPath)
+			body = resp.Body()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode()).To(Equal(http.StatusForbidden))
+			Expect(strings.Contains(string(body), umaForbiddenPath)).To(BeFalse())
+
+			By("Accessing not allowed method")
+			resp, err = rClient.R().Post(proxyAddress + umaMethodAllowedPath)
+			body = resp.Body()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resp.StatusCode()).To(Equal(http.StatusForbidden))
+			Expect(strings.Contains(string(body), umaMethodAllowedPath)).To(BeFalse())
 		})
 	})
 })

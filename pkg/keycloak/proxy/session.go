@@ -27,13 +27,14 @@ import (
 )
 
 // GetIdentity retrieves the user identity from a request, either from a session cookie or a bearer token
-func (r *OauthProxy) GetIdentity(req *http.Request) (*UserContext, error) {
+func (r *OauthProxy) GetIdentity(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error) {
 	var isBearer bool
 	// step: check for a bearer token or cookie with jwt token
 	access, isBearer, err := utils.GetTokenInRequest(
 		req,
-		r.Config.CookieAccessName,
+		tokenCookie,
 		r.Config.SkipAuthorizationHeaderIdentity,
+		tokenHeader,
 	)
 
 	if err != nil {
@@ -59,48 +60,6 @@ func (r *OauthProxy) GetIdentity(req *http.Request) (*UserContext, error) {
 	}
 
 	user.BearerToken = isBearer
-	user.RawToken = rawToken
-
-	r.Log.Debug("found the user identity",
-		zap.String("id", user.ID),
-		zap.String("name", user.Name),
-		zap.String("email", user.Email),
-		zap.String("roles", strings.Join(user.Roles, ",")),
-		zap.String("groups", strings.Join(user.Groups, ",")))
-
-	return user, nil
-}
-
-// GetUmaIdentity retrieves UMA token from a request, from a session cookie
-func (r *OauthProxy) GetUmaIdentity(req *http.Request) (*UserContext, error) {
-	umaToken, _, err := utils.GetTokenInRequest(
-		req,
-		r.Config.CookieUMAName,
-		r.Config.SkipAuthorizationHeaderIdentity,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
-		if umaToken, err = encryption.DecodeText(umaToken, r.Config.EncryptionKey); err != nil {
-			return nil, apperrors.ErrDecryption
-		}
-	}
-
-	rawToken := umaToken
-	token, err := jwt.ParseSigned(umaToken)
-
-	if err != nil {
-		return nil, err
-	}
-
-	user, err := ExtractIdentity(token)
-	if err != nil {
-		return nil, err
-	}
-
 	user.RawToken = rawToken
 
 	r.Log.Debug("found the user identity",

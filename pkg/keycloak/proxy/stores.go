@@ -16,13 +16,9 @@ limitations under the License.
 package proxy
 
 import (
-	"fmt"
-	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
-	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 
 	"go.uber.org/zap"
@@ -62,55 +58,6 @@ func (r *OauthProxy) DeleteRefreshToken(token string) error {
 	}
 
 	return nil
-}
-
-// StoreAuthz
-//
-//nolint:interfacer
-func (r *OauthProxy) StoreAuthz(token string, url *url.URL, value authorization.AuthzDecision, expiration time.Duration) error {
-	if len(token) == 0 {
-		return fmt.Errorf("token of zero length")
-	}
-
-	tokenHash := utils.GetHashKey(token)
-	pathHash := utils.GetHashKey(url.Path)
-	hash := fmt.Sprintf("%s%s", pathHash, tokenHash)
-	return r.Store.Set(hash, value.String(), expiration)
-}
-
-// Get retrieves a authz decision from store
-func (r *OauthProxy) GetAuthz(token string, url *url.URL) (authorization.AuthzDecision, error) {
-	if len(token) == 0 {
-		return authorization.DeniedAuthz, apperrors.ErrZeroLengthToken
-	}
-
-	tokenHash := utils.GetHashKey(token)
-	pathHash := utils.GetHashKey(url.Path)
-	hash := fmt.Sprintf("%s%s", pathHash, tokenHash)
-
-	exists, err := r.Store.Exists(hash)
-
-	if err != nil {
-		return authorization.DeniedAuthz, err
-	}
-
-	if !exists {
-		return authorization.DeniedAuthz, apperrors.ErrNoAuthzFound
-	}
-
-	val, err := r.Store.Get(hash)
-
-	if err != nil {
-		return authorization.DeniedAuthz, err
-	}
-
-	decision, err := strconv.Atoi(val)
-
-	if err != nil {
-		return authorization.DeniedAuthz, err
-	}
-
-	return authorization.AuthzDecision(decision), nil
 }
 
 // Close is used to close off any resources

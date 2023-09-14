@@ -455,6 +455,8 @@ func (r *OauthProxy) CreateReverseProxy() error {
 }
 
 // createForwardingProxy creates a forwarding proxy
+//
+//nolint:cyclop
 func (r *OauthProxy) createForwardingProxy() error {
 	r.Log.Info(
 		"enabling forward signing mode, listening on",
@@ -467,6 +469,8 @@ func (r *OauthProxy) createForwardingProxy() error {
 				"recommended you verify! (--skip-upstream-tls-verify=false)",
 		)
 	}
+
+	r.rpt = &RPT{}
 
 	if err := r.createUpstreamProxy(nil); err != nil {
 		return err
@@ -507,25 +511,35 @@ func (r *OauthProxy) createForwardingProxy() error {
 
 	proxy.OnResponse().DoFunc(func(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
 		// @NOTES, somewhat annoying but goproxy hands back a nil response on proxy client errors
-		if resp != nil && r.Config.EnableLogging {
-			start, assertOk := ctx.UserData.(time.Time)
+		if resp != nil {
+			if r.Config.EnableLogging {
+				start, assertOk := ctx.UserData.(time.Time)
+				if !assertOk {
+					r.Log.Error("assertion failed")
+					return nil
+				}
 
-			if !assertOk {
-				r.Log.Error("assertion failed")
-				return nil
+				latency := time.Since(start)
+				latencyMetric.Observe(latency.Seconds())
+
+				r.Log.Info("client request",
+					zap.String("method", resp.Request.Method),
+					zap.String("path", resp.Request.URL.Path),
+					zap.Int("status", resp.StatusCode),
+					zap.Int64("bytes", resp.ContentLength),
+					zap.String("host", resp.Request.Host),
+					zap.String("path", resp.Request.URL.Path),
+					zap.String("latency", latency.String()))
 			}
 
-			latency := time.Since(start)
-			latencyMetric.Observe(latency.Seconds())
-
-			r.Log.Info("client request",
-				zap.String("method", resp.Request.Method),
-				zap.String("path", resp.Request.URL.Path),
-				zap.Int("status", resp.StatusCode),
-				zap.Int64("bytes", resp.ContentLength),
-				zap.String("host", resp.Request.Host),
-				zap.String("path", resp.Request.URL.Path),
-				zap.String("latency", latency.String()))
+			if r.Config.EnableUma {
+				umaToken := resp.Header.Get(constant.UMAHeader)
+				if umaToken != "" {
+					r.rpt.m.Lock()
+					r.rpt.Token = umaToken
+					r.rpt.m.Unlock()
+				}
+			}
 		}
 
 		return resp

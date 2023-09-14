@@ -25,6 +25,11 @@ type PAT struct {
 	m     sync.RWMutex
 }
 
+type RPT struct {
+	Token string
+	m     sync.RWMutex
+}
+
 // reverseProxy is a wrapper
 type reverseProxy interface {
 	ServeHTTP(rw http.ResponseWriter, req *http.Request)
@@ -45,6 +50,7 @@ type OauthProxy struct {
 	templates      *template.Template
 	Upstream       reverseProxy
 	pat            *PAT
+	rpt            *RPT
 }
 
 // TokenResponse

@@ -368,7 +368,7 @@ data:
           "consentRequired": false,
           "standardFlowEnabled": true,
           "implicitFlowEnabled": false,
-          "directAccessGrantsEnabled": false,
+          "directAccessGrantsEnabled": true,
           "serviceAccountsEnabled": true,
           "publicClient": false,
           "frontchannelLogout": false,
@@ -678,7 +678,7 @@ data:
                 "logic": "POSITIVE",
                 "decisionStrategy": "UNANIMOUS",
                 "config": {
-                  "clients": "[\"test-client-uma\"]"
+                  "clients": "[\"test-client\"]"
                 }
               },
               {

@@ -339,6 +339,25 @@ func (r *OauthProxy) getPAT(done chan bool) {
 	}
 }
 
+func (r *OauthProxy) WithUMAIdentity(
+	req *http.Request,
+	wrt http.ResponseWriter,
+	user *UserContext,
+	authzFunc func(req *http.Request, userPerms authorization.Permissions) (authorization.AuthzDecision, error),
+) (authorization.AuthzDecision, error) {
+	umaUser, err := r.GetIdentity(req, r.Config.CookieUMAName, constant.UMAHeader)
+	if err != nil {
+		return authorization.DeniedAuthz, err
+	}
+
+	err = r.verifyUmaToken(user, umaUser, wrt, req)
+	if err != nil {
+		return authorization.DeniedAuthz, err
+	}
+
+	return authzFunc(req, umaUser.Permissions)
+}
+
 // getRPT retrieves relaying party token
 func (r *OauthProxy) getRPT(
 	req *http.Request,
@@ -347,7 +366,7 @@ func (r *OauthProxy) getRPT(
 	methodScope *string,
 ) (*gocloak.JWT, error) {
 	ctx, cancel := context.WithTimeout(
-		context.Background(),
+		req.Context(),
 		r.Config.OpenIDProviderTimeout,
 	)
 
@@ -707,26 +726,6 @@ func (r *OauthProxy) getRequestURIFromCookie(
 	}
 
 	return string(decoded)
-}
-
-func (r *OauthProxy) WithCodeFlowUMA(
-	req *http.Request,
-	wrt http.ResponseWriter,
-	user *UserContext,
-	authzFunc func(req *http.Request, userPerms authorization.Permissions) (authorization.AuthzDecision, error),
-) (authorization.AuthzDecision, error) {
-	umaUser, err := r.GetUmaIdentity(req)
-	if err != nil {
-		return authorization.DeniedAuthz,
-			fmt.Errorf("%w %s", apperrors.ErrGetIdentityFromUMA, err.Error())
-	}
-
-	err = r.verifyUmaToken(user, umaUser, wrt, req)
-	if err != nil {
-		return authorization.DeniedAuthz, err
-	}
-
-	return authzFunc(req, umaUser.Permissions)
 }
 
 func (r *OauthProxy) refreshUmaToken(

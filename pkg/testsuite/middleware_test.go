@@ -2116,9 +2116,10 @@ func TestEnableUma(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 
 	requests := []struct {
-		Name              string
-		ProxySettings     func(c *config.Config)
-		ExecutionSettings []fakeRequest
+		Name               string
+		ProxySettings      func(c *config.Config)
+		ExecutionSettings  []fakeRequest
+		AuthServerSettings *fakeAuthConfig
 	}{
 		{
 			Name: "TestUmaNoTokenNoRedirects",
@@ -2138,16 +2139,12 @@ func TestEnableUma(t *testing.T) {
 					ExpectedContent: func(body string, testNum int) {
 						assert.Equal(t, "", body)
 					},
-					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
-						"WWW-Authenticate": func(t *testing.T, c *config.Config, value string) {
-							assert.Contains(t, "ticket", value)
-						},
-					},
 				},
 			},
+			AuthServerSettings: &fakeAuthConfig{},
 		},
 		{
-			Name: "TestUmaTokenWithoutAuthz",
+			Name: "TestUmaTokenWithoutAuthzWithNoResourcesInAuthServer",
 			ProxySettings: func(conf *config.Config) {
 				conf.EnableUma = true
 				conf.EnableDefaultDeny = true
@@ -2164,14 +2161,12 @@ func TestEnableUma(t *testing.T) {
 					ExpectedCode:       http.StatusForbidden,
 					TokenAuthorization: &authorization.Permissions{},
 					ExpectedContent: func(body string, testNum int) {
-						assert.Equal(t, "", body)
-					},
-					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
-						"WWW-Authenticate": func(t *testing.T, c *config.Config, value string) {
-							assert.Contains(t, "ticket", value)
-						},
+						assert.Contains(t, body, "")
 					},
 				},
+			},
+			AuthServerSettings: &fakeAuthConfig{
+				ResourceSetHandlerFailure: true,
 			},
 		},
 		{
@@ -2187,9 +2182,9 @@ func TestEnableUma(t *testing.T) {
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:           "/test",
-					ExpectedProxy: false,
+					ExpectedProxy: true,
 					HasToken:      true,
-					ExpectedCode:  http.StatusForbidden,
+					ExpectedCode:  http.StatusOK,
 					TokenAuthorization: &authorization.Permissions{
 						Permissions: []authorization.Permission{
 							{
@@ -2200,15 +2195,12 @@ func TestEnableUma(t *testing.T) {
 						},
 					},
 					ExpectedContent: func(body string, testNum int) {
-						assert.Equal(t, "", body)
-					},
-					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
-						"WWW-Authenticate": func(t *testing.T, c *config.Config, value string) {
-							assert.Contains(t, "ticket", value)
-						},
+						assert.Contains(t, body, "test")
+						assert.Contains(t, body, "method")
 					},
 				},
 			},
+			AuthServerSettings: &fakeAuthConfig{},
 		},
 		{
 			Name: "TestUmaTokenWithoutScope",
@@ -2223,9 +2215,9 @@ func TestEnableUma(t *testing.T) {
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:           "/test",
-					ExpectedProxy: false,
+					ExpectedProxy: true,
 					HasToken:      true,
-					ExpectedCode:  http.StatusForbidden,
+					ExpectedCode:  http.StatusOK,
 					TokenAuthorization: &authorization.Permissions{
 						Permissions: []authorization.Permission{
 							{
@@ -2236,15 +2228,12 @@ func TestEnableUma(t *testing.T) {
 						},
 					},
 					ExpectedContent: func(body string, testNum int) {
-						assert.Equal(t, "", body)
-					},
-					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
-						"WWW-Authenticate": func(t *testing.T, c *config.Config, value string) {
-							assert.Contains(t, "ticket", value)
-						},
+						assert.Contains(t, body, "test")
+						assert.Contains(t, body, "method")
 					},
 				},
 			},
+			AuthServerSettings: &fakeAuthConfig{},
 		},
 		{
 			Name: "TestUmaOK",
@@ -2277,6 +2266,7 @@ func TestEnableUma(t *testing.T) {
 					},
 				},
 			},
+			AuthServerSettings: &fakeAuthConfig{},
 		},
 	}
 
@@ -2287,7 +2277,7 @@ func TestEnableUma(t *testing.T) {
 			testCase.Name,
 			func(t *testing.T) {
 				testCase.ProxySettings(&c)
-				p := newFakeProxy(&c, &fakeAuthConfig{})
+				p := newFakeProxy(&c, testCase.AuthServerSettings)
 				p.RunTests(t, testCase.ExecutionSettings)
 			},
 		)

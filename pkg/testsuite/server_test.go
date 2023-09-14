@@ -24,13 +24,11 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -364,30 +362,6 @@ func TestUmaForwardingProxy(t *testing.T) {
 		ProxySettings     func(conf *config.Config)
 		ExecutionSettings []fakeRequest
 	}{
-		{
-			Name: "TestFailureOnDisabledUmaOnForwardingProxy",
-			ProxySettings: func(conf *config.Config) {
-				conf.EnableForwarding = true
-				conf.ForwardingDomains = []string{}
-				conf.ForwardingUsername = ValidUsername
-				conf.ForwardingPassword = ValidPassword
-				conf.ForwardingGrantType = configcore.GrantTypeUserCreds
-				conf.PatRetryCount = 5
-				conf.PatRetryInterval = 2 * time.Second
-				conf.OpenIDProviderTimeout = 30 * time.Second
-			},
-			ExecutionSettings: []fakeRequest{
-				{
-					URL:           upstreamProxy.getServiceURL() + "/test",
-					ProxyRequest:  true,
-					ExpectedProxy: false,
-					ExpectedCode:  http.StatusForbidden,
-					ExpectedContent: func(body string, testNum int) {
-						assert.Equal(t, "", body)
-					},
-				},
-			},
-		},
 		{
 			Name: "TestPasswordGrant",
 			ProxySettings: func(conf *config.Config) {
@@ -1840,94 +1814,6 @@ func TestCustomHTTPMethod(t *testing.T) {
 				testCase.ProxySettings(c)
 				p := newFakeProxy(c, &fakeAuthConfig{})
 				p.RunTests(t, testCase.ExecutionSettings)
-			},
-		)
-	}
-}
-
-//nolint:cyclop
-func TestStoreAuthz(t *testing.T) {
-	cfg := newFakeKeycloakConfig()
-	token := newTestToken("http://test")
-	jwt, err := token.getToken()
-
-	if err != nil {
-		t.Fatal("Testing token generation failed")
-	}
-
-	redisServer, err := miniredis.Run()
-
-	if err != nil {
-		t.Fatalf("Starting redis failed %s", err)
-	}
-
-	defer redisServer.Close()
-
-	tests := []struct {
-		Name            string
-		ProxySettings   func(c *config.Config)
-		ExpectedFailure bool
-	}{
-		{
-			Name: "TestEntryInRedis",
-			ProxySettings: func(c *config.Config) {
-				c.StoreURL = fmt.Sprintf("redis://%s", redisServer.Addr())
-			},
-		},
-		{
-			Name: "TestFailedRedis",
-			ProxySettings: func(c *config.Config) {
-				c.StoreURL = fmt.Sprintf("redis://%s", "failed:65000")
-			},
-			ExpectedFailure: true,
-		},
-	}
-
-	for _, testCase := range tests {
-		testCase := testCase
-		c := *cfg
-		t.Run(
-			testCase.Name,
-			func(t *testing.T) {
-				testCase.ProxySettings(&c)
-				fProxy := newFakeProxy(&c, &fakeAuthConfig{})
-
-				url, err := url.Parse("http://test.com/test")
-
-				if err != nil {
-					t.Fatal("Problem parsing url")
-				}
-
-				err = fProxy.proxy.StoreAuthz(jwt, url, authorization.AllowedAuthz, 1*time.Second)
-
-				if err != nil && !testCase.ExpectedFailure {
-					t.Fatalf("error storing authz %v", err)
-				}
-
-				if !testCase.ExpectedFailure {
-					url.Path += "/append"
-					err = fProxy.proxy.StoreAuthz(jwt, url, authorization.AllowedAuthz, 1*time.Second)
-
-					if err != nil {
-						t.Fatalf("error storing authz %v", err)
-					}
-
-					keys := redisServer.Keys()
-
-					if len(keys) != 2 {
-						t.Fatalf("expected two keys, got %d", len(keys))
-					}
-
-					decision, err := redisServer.Get(keys[0])
-
-					if err != nil {
-						t.Fatalf("problem getting value from redis")
-					}
-
-					if decision != authorization.AllowedAuthz.String() {
-						t.Fatalf("bad decision stored, expected allowed, got %v", decision)
-					}
-				}
 			},
 		)
 	}

@@ -345,14 +345,28 @@ func GetRefreshTokenFromCookie(req *http.Request, cookieName string) (string, er
 	return token, nil
 }
 
-// getTokenInRequest returns the access token from the http request
-func GetTokenInRequest(req *http.Request, name string, skipAuthorizationHeaderIdentity bool) (string, bool, error) {
+// getTokenInRequest returns the token from the http request
+//
+//nolint:cyclop
+func GetTokenInRequest(
+	req *http.Request,
+	name string,
+	skipAuthorizationHeaderIdentity bool,
+	tokenHeader string,
+) (string, bool, error) {
 	bearer := true
 	token := ""
 	var err error
 
-	if !skipAuthorizationHeaderIdentity {
+	if tokenHeader == "" && !skipAuthorizationHeaderIdentity {
 		token, err = GetTokenInBearer(req)
+		if err != nil && err != apperrors.ErrSessionNotFound {
+			return "", false, err
+		}
+	}
+
+	if tokenHeader != "" {
+		token, err = GetTokenInHeader(req, tokenHeader)
 		if err != nil && err != apperrors.ErrSessionNotFound {
 			return "", false, err
 		}
@@ -385,6 +399,15 @@ func GetTokenInBearer(req *http.Request) (string, error) {
 		return "", apperrors.ErrSessionNotFound
 	}
 	return items[1], nil
+}
+
+// getTokenInHeader retrieves a token from the header
+func GetTokenInHeader(req *http.Request, headerName string) (string, error) {
+	token := req.Header.Get(headerName)
+	if token == "" {
+		return "", apperrors.ErrSessionNotFound
+	}
+	return token, nil
 }
 
 // getTokenInCookie retrieves the access token from the request cookies
