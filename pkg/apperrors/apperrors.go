@@ -10,6 +10,7 @@ var (
 	ErrTokenScopeNotMatchResourceScope = errors.New("scopes in token doesn't match scopes in IDP resource")
 	ErrMissingScopesForResource        = errors.New("missing scopes for resource in IDP provider")
 	ErrNoIDPResourceForPath            = errors.New("could not find resource matching path")
+	ErrTooManyResources                = errors.New("too many resources got from IDP (hint: probably you have multiple resources in IDP with same path and scopes combination)")
 	ErrResourceIDNotPresent            = errors.New("resource id not present in token permissions")
 	ErrPermissionTicketForResourceID   = errors.New("problem getting permission ticket for resourceId")
 	ErrRetrieveRPT                     = errors.New("problem getting RPT for resource (hint: do you have permissions assigned to resource?)")

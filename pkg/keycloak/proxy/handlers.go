@@ -251,16 +251,17 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 	var umaToken string
 	var umaError error
 	if r.Config.EnableUma {
-		var methodScope string
+		var methodScope *string
 		if r.Config.EnableUmaMethodScope {
-			methodScope = "method:" + req.Method
+			ms := "method:" + req.Method
+			methodScope = &ms
 		}
 		// we are not returning access forbidden immediately because we want to setup
 		// access/refresh cookie as authentication already was done properly and user
 		// could try to get new uma token/cookie, e.g in case he tried first to access
 		// resource to which he doesn't have access
 
-		token, erru := r.getRPT(req, redirectURI, accessToken, &methodScope)
+		token, erru := r.getRPT(req, redirectURI, accessToken, methodScope)
 		umaError = erru
 		if token != nil {
 			umaToken = token.AccessToken

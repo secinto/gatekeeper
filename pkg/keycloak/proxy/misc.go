@@ -400,10 +400,12 @@ func (r *OauthProxy) getRPT(
 	if len(resources) == 0 {
 		return nil, apperrors.ErrNoIDPResourceForPath
 	}
+	if len(resources) > 1 {
+		return nil, apperrors.ErrTooManyResources
+	}
 
 	resourceID := resources[0].ID
 	resourceScopes := make([]string, 0)
-
 	if len(*resources[0].ResourceScopes) == 0 {
 		return nil, fmt.Errorf(
 			"%w, resource: %s",
@@ -412,8 +414,12 @@ func (r *OauthProxy) getRPT(
 		)
 	}
 
-	for _, scope := range *resources[0].ResourceScopes {
-		resourceScopes = append(resourceScopes, *scope.Name)
+	if methodScope != nil {
+		resourceScopes = append(resourceScopes, *methodScope)
+	} else {
+		for _, scope := range *resources[0].ResourceScopes {
+			resourceScopes = append(resourceScopes, *scope.Name)
+		}
 	}
 
 	permissions := []gocloak.CreatePermissionTicketParams{

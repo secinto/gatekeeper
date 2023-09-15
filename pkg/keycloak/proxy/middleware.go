@@ -465,9 +465,10 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 			scope.Logger.Debug("query external authz provider for authz")
 
 			if r.Config.EnableUma {
-				var methodScope string
+				var methodScope *string
 				if r.Config.EnableUmaMethodScope {
-					methodScope = "method:" + req.Method
+					ms := "method:" + req.Method
+					methodScope = &ms
 				}
 
 				authzFunc := func(
@@ -484,7 +485,7 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 						r.Config.OpenIDProviderTimeout,
 						token,
 						r.Config.Realm,
-						&methodScope,
+						methodScope,
 					)
 					return provider.Authorize()
 				}
@@ -495,7 +496,7 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					scope.Logger.Error(err.Error())
 					scope.Logger.Info("trying to get new uma token")
 
-					umaUser, err = r.refreshUmaToken(req, user, &methodScope)
+					umaUser, err = r.refreshUmaToken(req, user, methodScope)
 					if err != nil {
 						scope.Logger.Error(err.Error())
 						//nolint:contextcheck
