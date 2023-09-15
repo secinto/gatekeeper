@@ -205,7 +205,7 @@ func TryUpdateConnection(req *http.Request, writer http.ResponseWriter, endpoint
 
 	defer server.Close()
 
-	// @check the the response writer implements the Hijack method
+	// @check the response writer implements Hijack method
 	hijacker, assertOk := writer.(http.Hijacker)
 
 	if !assertOk {
@@ -423,9 +423,8 @@ func GetTokenInCookie(req *http.Request, name string) (string, error) {
 		cookie := FindCookie(name+"-"+strconv.Itoa(i), req.Cookies())
 		if cookie == nil {
 			break
-		} else {
-			token.WriteString(cookie.Value)
 		}
+		token.WriteString(cookie.Value)
 	}
 
 	if token.Len() == 0 {

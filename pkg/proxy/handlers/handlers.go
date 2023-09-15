@@ -25,10 +25,10 @@ import (
 )
 
 // EmptyHandler is responsible for doing nothing
-func EmptyHandler(w http.ResponseWriter, req *http.Request) {}
+func EmptyHandler(_ http.ResponseWriter, _ *http.Request) {}
 
 // HealthHandler is a health check handler for the service
-func HealthHandler(w http.ResponseWriter, req *http.Request) {
+func HealthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set(constant.VersionHeader, proxycore.GetVersion())
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("OK\n"))
@@ -39,7 +39,7 @@ func HealthHandler(w http.ResponseWriter, req *http.Request) {
 //nolint:cyclop
 func DebugHandler(writer http.ResponseWriter, req *http.Request) {
 	const symbolProfile = "symbol"
-	//nolint:contextcheck
+
 	name := chi.URLParam(req, "name")
 
 	switch req.Method {
@@ -74,7 +74,7 @@ func DebugHandler(writer http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func MethodNotAllowHandlder(w http.ResponseWriter, req *http.Request) {
+func MethodNotAllowHandlder(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusMethodNotAllowed)
 	_, _ = w.Write(nil)
 }

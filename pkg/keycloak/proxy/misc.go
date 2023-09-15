@@ -66,7 +66,7 @@ func filterCookies(req *http.Request, filter []string) error {
 }
 
 // revokeProxy is responsible to stopping the middleware from proxying the request
-func (r *OauthProxy) revokeProxy(w http.ResponseWriter, req *http.Request) context.Context {
+func (r *OauthProxy) revokeProxy(req *http.Request) context.Context {
 	var scope *RequestScope
 	ctxVal := req.Context().Value(constant.ContextScopeName)
 
@@ -104,7 +104,7 @@ func (r *OauthProxy) accessForbidden(wrt http.ResponseWriter, req *http.Request)
 		}
 	}
 
-	return r.revokeProxy(wrt, req)
+	return r.revokeProxy(req)
 }
 
 // accessError redirects the user to the error page
@@ -123,7 +123,7 @@ func (r *OauthProxy) accessError(wrt http.ResponseWriter, req *http.Request) con
 		}
 	}
 
-	return r.revokeProxy(wrt, req)
+	return r.revokeProxy(req)
 }
 
 // redirectToURL redirects the user and aborts the context
@@ -134,14 +134,14 @@ func (r *OauthProxy) redirectToURL(url string, wrt http.ResponseWriter, req *htt
 	)
 
 	http.Redirect(wrt, req, url, statusCode)
-	return r.revokeProxy(wrt, req)
+	return r.revokeProxy(req)
 }
 
 // redirectToAuthorization redirects the user to authorization handler
 func (r *OauthProxy) redirectToAuthorization(wrt http.ResponseWriter, req *http.Request) context.Context {
 	if r.Config.NoRedirects {
 		wrt.WriteHeader(http.StatusUnauthorized)
-		return r.revokeProxy(wrt, req)
+		return r.revokeProxy(req)
 	}
 
 	// step: add a state referrer to the authorization page
@@ -156,7 +156,7 @@ func (r *OauthProxy) redirectToAuthorization(wrt http.ResponseWriter, req *http.
 		)
 
 		wrt.WriteHeader(http.StatusForbidden)
-		return r.revokeProxy(wrt, req)
+		return r.revokeProxy(req)
 	}
 
 	url := r.Config.WithOAuthURI(constant.AuthorizationURL + authQuery)
@@ -169,7 +169,7 @@ func (r *OauthProxy) redirectToAuthorization(wrt http.ResponseWriter, req *http.
 			r.Log.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
 
 			wrt.WriteHeader(http.StatusForbidden)
-			return r.revokeProxy(wrt, req)
+			return r.revokeProxy(req)
 		}
 
 		url = fmt.Sprintf(
@@ -189,7 +189,7 @@ func (r *OauthProxy) redirectToAuthorization(wrt http.ResponseWriter, req *http.
 		http.StatusSeeOther,
 	)
 
-	return r.revokeProxy(wrt, req)
+	return r.revokeProxy(req)
 }
 
 // GetAccessCookieExpiration calculates the expiration of the access token cookie
@@ -341,7 +341,6 @@ func (r *OauthProxy) getPAT(done chan bool) {
 
 func (r *OauthProxy) WithUMAIdentity(
 	req *http.Request,
-	wrt http.ResponseWriter,
 	user *UserContext,
 	authzFunc func(req *http.Request, userPerms authorization.Permissions) (authorization.AuthzDecision, error),
 ) (authorization.AuthzDecision, error) {
@@ -350,7 +349,7 @@ func (r *OauthProxy) WithUMAIdentity(
 		return authorization.DeniedAuthz, err
 	}
 
-	err = r.verifyUmaToken(user, umaUser, wrt, req)
+	err = r.verifyUmaToken(user, umaUser, req)
 	if err != nil {
 		return authorization.DeniedAuthz, err
 	}
@@ -519,7 +518,6 @@ func (r *OauthProxy) getCodeFlowTokens(
 func (r *OauthProxy) verifyUmaToken(
 	accessUserCtx *UserContext,
 	umaUserCtx *UserContext,
-	writer http.ResponseWriter,
 	req *http.Request,
 ) error {
 	// make sure somebody doesn't sent one user access token
@@ -683,7 +681,6 @@ func (r *OauthProxy) encryptToken(
 	encKey string,
 	tokenType string,
 	writer http.ResponseWriter,
-	req *http.Request,
 ) (string, error) {
 	var err error
 	var encrypted string

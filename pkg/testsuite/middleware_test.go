@@ -1437,7 +1437,7 @@ func TestRefreshToken(t *testing.T) {
 	}
 }
 
-func delay(no int, req *resty.Request, resp *resty.Response) {
+func delay(no int, _ *resty.Request, _ *resty.Response) {
 	if no == 0 {
 		<-time.After(1000 * time.Millisecond)
 	}
@@ -1465,7 +1465,7 @@ func checkAccessTokenEncryption(t *testing.T, cfg *config.Config, value string) 
 	return assert.Contains(t, user.Claims, "aud") && assert.Contains(t, user.Claims, "email")
 }
 
-func checkRefreshTokenEncryption(t *testing.T, cfg *config.Config, value string) bool {
+func checkRefreshTokenEncryption(_ *testing.T, cfg *config.Config, value string) bool {
 	rawToken, err := encryption.DecodeText(value, cfg.EncryptionKey)
 
 	if err != nil {

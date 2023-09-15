@@ -27,7 +27,7 @@ import (
 )
 
 // DropCookie drops a cookie into the response
-func (r *OauthProxy) DropCookie(wrt http.ResponseWriter, host, name, value string, duration time.Duration) {
+func (r *OauthProxy) DropCookie(wrt http.ResponseWriter, name, value string, duration time.Duration) {
 	// step: default to the host header, else the config domain
 	domain := ""
 
@@ -105,10 +105,10 @@ func (r *OauthProxy) dropCookieWithChunks(req *http.Request, wrt http.ResponseWr
 	maxCookieChunkLength := r.GetMaxCookieChunkLength(req, name)
 
 	if len(value) <= maxCookieChunkLength {
-		r.DropCookie(wrt, req.Host, name, value, duration)
+		r.DropCookie(wrt, name, value, duration)
 	} else {
 		// write divided cookies because payload is too long for single cookie
-		r.DropCookie(wrt, req.Host, name, value[0:maxCookieChunkLength], duration)
+		r.DropCookie(wrt, name, value[0:maxCookieChunkLength], duration)
 
 		for idx := maxCookieChunkLength; idx < len(value); idx += maxCookieChunkLength {
 			end := idx + maxCookieChunkLength
@@ -119,7 +119,6 @@ func (r *OauthProxy) dropCookieWithChunks(req *http.Request, wrt http.ResponseWr
 
 			r.DropCookie(
 				wrt,
-				req.Host,
 				name+"-"+strconv.Itoa(idx/maxCookieChunkLength),
 				value[idx:end],
 				duration,
@@ -165,15 +164,15 @@ func (r *OauthProxy) writeStateParameterCookie(req *http.Request, wrt http.Respo
 
 	encRequestURI := base64.StdEncoding.EncodeToString([]byte(requestURI))
 
-	r.DropCookie(wrt, req.Host, r.Config.CookieRequestURIName, encRequestURI, 0)
-	r.DropCookie(wrt, req.Host, r.Config.CookieOAuthStateName, uuid.String(), 0)
+	r.DropCookie(wrt, r.Config.CookieRequestURIName, encRequestURI, 0)
+	r.DropCookie(wrt, r.Config.CookieOAuthStateName, uuid.String(), 0)
 
 	return uuid.String()
 }
 
 // writePKCECookie sets a code verifier cookie into the response
-func (r *OauthProxy) writePKCECookie(req *http.Request, wrt http.ResponseWriter, codeVerifier string) {
-	r.DropCookie(wrt, req.Host, r.Config.CookiePKCEName, codeVerifier, 0)
+func (r *OauthProxy) writePKCECookie(wrt http.ResponseWriter, codeVerifier string) {
+	r.DropCookie(wrt, r.Config.CookiePKCEName, codeVerifier, 0)
 }
 
 // ClearAllCookies is just a helper function for the below
@@ -185,7 +184,7 @@ func (r *OauthProxy) ClearAllCookies(req *http.Request, w http.ResponseWriter) {
 }
 
 func (r *OauthProxy) ClearCookie(req *http.Request, wrt http.ResponseWriter, name string) {
-	r.DropCookie(wrt, req.Host, name, "", -10*time.Hour)
+	r.DropCookie(wrt, name, "", -10*time.Hour)
 
 	// clear divided cookies
 	for idx := 1; idx < 600; idx++ {
@@ -194,7 +193,6 @@ func (r *OauthProxy) ClearCookie(req *http.Request, wrt http.ResponseWriter, nam
 		if err == nil {
 			r.DropCookie(
 				wrt,
-				req.Host,
 				name+"-"+strconv.Itoa(idx),
 				"",
 				-10*time.Hour,

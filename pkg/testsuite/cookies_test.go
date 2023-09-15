@@ -110,33 +110,30 @@ func TestCookieDomain(t *testing.T) {
 func TestDropCookie(t *testing.T) {
 	proxy, _, _ := newTestProxyService(nil)
 
-	req := newFakeHTTPRequest("GET", "/admin")
 	resp := httptest.NewRecorder()
-	proxy.DropCookie(resp, req.Host, "test-cookie", "test-value", 0)
+	proxy.DropCookie(resp, "test-cookie", "test-value", 0)
 
 	assert.Equal(t, resp.Header().Get("Set-Cookie"),
 		"test-cookie=test-value; Path=/",
 		"we have not set the cookie, headers: %v", resp.Header())
 
-	req = newFakeHTTPRequest("GET", "/admin")
 	resp = httptest.NewRecorder()
 	proxy.Config.SecureCookie = false
-	proxy.DropCookie(resp, req.Host, "test-cookie", "test-value", 0)
+	proxy.DropCookie(resp, "test-cookie", "test-value", 0)
 
 	assert.Equal(t, resp.Header().Get("Set-Cookie"),
 		"test-cookie=test-value; Path=/",
 		"we have not set the cookie, headers: %v", resp.Header())
 
-	req = newFakeHTTPRequest("GET", "/admin")
 	resp = httptest.NewRecorder()
 	proxy.Config.SecureCookie = true
-	proxy.DropCookie(resp, req.Host, "test-cookie", "test-value", 0)
+	proxy.DropCookie(resp, "test-cookie", "test-value", 0)
 	assert.NotEqual(t, resp.Header().Get("Set-Cookie"),
 		"test-cookie=test-value; Path=/; HttpOnly; Secure",
 		"we have not set the cookie, headers: %v", resp.Header())
 
 	proxy.Config.CookieDomain = "test.com"
-	proxy.DropCookie(resp, req.Host, "test-cookie", "test-value", 0)
+	proxy.DropCookie(resp, "test-cookie", "test-value", 0)
 	proxy.Config.SecureCookie = false
 	assert.NotEqual(t, resp.Header().Get("Set-Cookie"),
 		"test-cookie=test-value; Path=/; Domain=test.com;",
@@ -159,9 +156,8 @@ func TestSessionOnlyCookie(t *testing.T) {
 	p, _, _ := newTestProxyService(nil)
 	p.Config.EnableSessionCookies = true
 
-	req := newFakeHTTPRequest("GET", "/admin")
 	resp := httptest.NewRecorder()
-	p.DropCookie(resp, req.Host, "test-cookie", "test-value", 1*time.Hour)
+	p.DropCookie(resp, "test-cookie", "test-value", 1*time.Hour)
 
 	assert.Equal(t, resp.Header().Get("Set-Cookie"),
 		"test-cookie=test-value; Path=/",
@@ -171,36 +167,32 @@ func TestSessionOnlyCookie(t *testing.T) {
 func TestSameSiteCookie(t *testing.T) {
 	proxy, _, _ := newTestProxyService(nil)
 
-	req := newFakeHTTPRequest("GET", "/admin")
 	resp := httptest.NewRecorder()
-	proxy.DropCookie(resp, req.Host, "test-cookie", "test-value", 0)
+	proxy.DropCookie(resp, "test-cookie", "test-value", 0)
 
 	assert.Equal(t, resp.Header().Get("Set-Cookie"),
 		"test-cookie=test-value; Path=/",
 		"we have not set the cookie, headers: %v", resp.Header())
 
-	req = newFakeHTTPRequest("GET", "/admin")
 	resp = httptest.NewRecorder()
 	proxy.Config.SameSiteCookie = constant.SameSiteStrict
-	proxy.DropCookie(resp, req.Host, "test-cookie", "test-value", 0)
+	proxy.DropCookie(resp, "test-cookie", "test-value", 0)
 
 	assert.Equal(t, resp.Header().Get("Set-Cookie"),
 		"test-cookie=test-value; Path=/; SameSite=Strict",
 		"we have not set the cookie, headers: %v", resp.Header())
 
-	req = newFakeHTTPRequest("GET", "/admin")
 	resp = httptest.NewRecorder()
 	proxy.Config.SameSiteCookie = constant.SameSiteLax
-	proxy.DropCookie(resp, req.Host, "test-cookie", "test-value", 0)
+	proxy.DropCookie(resp, "test-cookie", "test-value", 0)
 
 	assert.Equal(t, resp.Header().Get("Set-Cookie"),
 		"test-cookie=test-value; Path=/; SameSite=Lax",
 		"we have not set the cookie, headers: %v", resp.Header())
 
-	req = newFakeHTTPRequest("GET", "/admin")
 	resp = httptest.NewRecorder()
 	proxy.Config.SameSiteCookie = constant.SameSiteNone
-	proxy.DropCookie(resp, req.Host, "test-cookie", "test-value", 0)
+	proxy.DropCookie(resp, "test-cookie", "test-value", 0)
 
 	assert.Equal(t, resp.Header().Get("Set-Cookie"),
 		"test-cookie=test-value; Path=/; SameSite=None",
@@ -210,18 +202,16 @@ func TestSameSiteCookie(t *testing.T) {
 func TestHTTPOnlyCookie(t *testing.T) {
 	proxy, _, _ := newTestProxyService(nil)
 
-	req := newFakeHTTPRequest("GET", "/admin")
 	resp := httptest.NewRecorder()
-	proxy.DropCookie(resp, req.Host, "test-cookie", "test-value", 0)
+	proxy.DropCookie(resp, "test-cookie", "test-value", 0)
 
 	assert.Equal(t, resp.Header().Get("Set-Cookie"),
 		"test-cookie=test-value; Path=/",
 		"we have not set the cookie, headers: %v", resp.Header())
 
-	req = newFakeHTTPRequest("GET", "/admin")
 	resp = httptest.NewRecorder()
 	proxy.Config.HTTPOnlyCookie = true
-	proxy.DropCookie(resp, req.Host, "test-cookie", "test-value", 0)
+	proxy.DropCookie(resp, "test-cookie", "test-value", 0)
 
 	assert.Equal(t, resp.Header().Get("Set-Cookie"),
 		"test-cookie=test-value; Path=/; HttpOnly",

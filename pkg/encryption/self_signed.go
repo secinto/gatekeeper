@@ -145,7 +145,7 @@ func (c *SelfSignedCertificate) updateCertificate(cert tls.Certificate) {
 }
 
 // GetCertificate is responsible for retrieving
-func (c *SelfSignedCertificate) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+func (c *SelfSignedCertificate) GetCertificate(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	c.RLock()
 	defer c.RUnlock()
 

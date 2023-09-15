@@ -125,7 +125,7 @@ func (c *CertificationRotation) storeCertificate(certifacte tls.Certificate) err
 }
 
 // GetCertificate is responsible for retrieving
-func (c *CertificationRotation) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+func (c *CertificationRotation) GetCertificate(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	c.RLock()
 	defer c.RUnlock()
 

@@ -405,7 +405,7 @@ func (r *fakeAuthServer) setTokenExpiration(tm time.Duration) *fakeAuthServer {
 	return r
 }
 
-func (r *fakeAuthServer) discoveryHandler(wrt http.ResponseWriter, req *http.Request) {
+func (r *fakeAuthServer) discoveryHandler(wrt http.ResponseWriter, _ *http.Request) {
 	base := fmt.Sprintf(
 		"%s://%s%s/realms/hod-test",
 		r.location.Scheme,
@@ -413,7 +413,7 @@ func (r *fakeAuthServer) discoveryHandler(wrt http.ResponseWriter, req *http.Req
 		r.fakeAuthConfig.DiscoveryURLPrefix,
 	)
 	baseWithProto := "/protocol/openid-connect"
-	renderJSON(http.StatusOK, wrt, req, fakeOidcDiscoveryResponse{
+	renderJSON(http.StatusOK, wrt, fakeOidcDiscoveryResponse{
 		Issuer:      base,
 		AuthURL:     base + baseWithProto + "/auth",
 		TokenURL:    base + baseWithProto + "/token",
@@ -423,8 +423,8 @@ func (r *fakeAuthServer) discoveryHandler(wrt http.ResponseWriter, req *http.Req
 	})
 }
 
-func (r *fakeAuthServer) keysHandler(w http.ResponseWriter, req *http.Request) {
-	renderJSON(http.StatusOK, w, req, jose2.JSONWebKeySet{Keys: []jose2.JSONWebKey{r.key}})
+func (r *fakeAuthServer) keysHandler(w http.ResponseWriter, _ *http.Request) {
+	renderJSON(http.StatusOK, w, jose2.JSONWebKeySet{Keys: []jose2.JSONWebKey{r.key}})
 }
 
 func (r *fakeAuthServer) authHandler(wrt http.ResponseWriter, req *http.Request) {
@@ -464,7 +464,7 @@ func (r *fakeAuthServer) authHandler(wrt http.ResponseWriter, req *http.Request)
 	http.Redirect(wrt, req, redirectionURL, http.StatusSeeOther)
 }
 
-func (r *fakeAuthServer) logoutHandler(w http.ResponseWriter, req *http.Request) {
+func (r *fakeAuthServer) logoutHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -501,7 +501,7 @@ func (r *fakeAuthServer) userInfoHandler(wrt http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	renderJSON(http.StatusOK, wrt, req, map[string]interface{}{
+	renderJSON(http.StatusOK, wrt, map[string]interface{}{
 		"sub":                user.Claims["sub"],
 		"name":               user.Claims["name"],
 		"given_name":         user.Claims["given_name"],
@@ -567,7 +567,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 		}
 
 		if username == ValidUsername && password == ValidPassword {
-			renderJSON(http.StatusOK, writer, req, proxy.TokenResponse{
+			renderJSON(http.StatusOK, writer, proxy.TokenResponse{
 				TokenType:    "Bearer",
 				IDToken:      jwtAccess,
 				AccessToken:  jwtAccess,
@@ -577,7 +577,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			return
 		}
 
-		renderJSON(http.StatusUnauthorized, writer, req, map[string]string{
+		renderJSON(http.StatusUnauthorized, writer, map[string]string{
 			"error":             "invalid_grant",
 			"error_description": "invalid user credentials",
 		})
@@ -597,7 +597,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 		}
 
 		if clientID == ValidUsername && clientSecret == ValidPassword {
-			renderJSON(http.StatusOK, writer, req, proxy.TokenResponse{
+			renderJSON(http.StatusOK, writer, proxy.TokenResponse{
 				TokenType:    "Bearer",
 				IDToken:      jwtAccess,
 				AccessToken:  jwtAccess,
@@ -607,7 +607,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			return
 		}
 
-		renderJSON(http.StatusUnauthorized, writer, req, map[string]string{
+		renderJSON(http.StatusUnauthorized, writer, map[string]string{
 			"error":             "invalid_grant",
 			"error_description": "invalid client credentials",
 		})
@@ -650,7 +650,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			return
 		}
 
-		renderJSON(http.StatusOK, writer, req, proxy.TokenResponse{
+		renderJSON(http.StatusOK, writer, proxy.TokenResponse{
 			TokenType:   "Bearer",
 			IDToken:     jwtAccess,
 			AccessToken: jwtAccess,
@@ -665,7 +665,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			}
 		}
 
-		renderJSON(http.StatusOK, writer, req, proxy.TokenResponse{
+		renderJSON(http.StatusOK, writer, proxy.TokenResponse{
 			TokenType:    "Bearer",
 			IDToken:      jwtAccess,
 			AccessToken:  jwtAccess,
@@ -673,7 +673,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			ExpiresIn:    float64(expires.Second()),
 		})
 	case configcore.GrantTypeUmaTicket:
-		renderJSON(http.StatusOK, writer, req, proxy.TokenResponse{
+		renderJSON(http.StatusOK, writer, proxy.TokenResponse{
 			TokenType:    "Bearer",
 			IDToken:      jwtAccess,
 			AccessToken:  jwtAccess,
@@ -685,14 +685,14 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 	}
 }
 
-func (r *fakeAuthServer) ResourcesHandler(w http.ResponseWriter, req *http.Request) {
+func (r *fakeAuthServer) ResourcesHandler(w http.ResponseWriter, _ *http.Request) {
 	response := []string{"6ef1b62e-0fd4-47f2-81fc-eead97a01c22"}
-	renderJSON(http.StatusOK, w, req, response)
+	renderJSON(http.StatusOK, w, response)
 }
 
-func (r *fakeAuthServer) ResourceHandler(wrt http.ResponseWriter, req *http.Request) {
+func (r *fakeAuthServer) ResourceHandler(wrt http.ResponseWriter, _ *http.Request) {
 	if r.resourceSetHandlerFailure {
-		renderJSON(http.StatusNotFound, wrt, req, []string{})
+		renderJSON(http.StatusNotFound, wrt, []string{})
 	}
 
 	type Resource struct {
@@ -726,10 +726,10 @@ func (r *fakeAuthServer) ResourceHandler(wrt http.ResponseWriter, req *http.Requ
 			Name string `json:"name"`
 		}{{Name: "test"}},
 	}
-	renderJSON(http.StatusOK, wrt, req, response)
+	renderJSON(http.StatusOK, wrt, response)
 }
 
-func (r *fakeAuthServer) PermissionTicketHandler(wrt http.ResponseWriter, req *http.Request) {
+func (r *fakeAuthServer) PermissionTicketHandler(wrt http.ResponseWriter, _ *http.Request) {
 	token := newTestToken(r.getLocation())
 	acc, err := token.getToken()
 
@@ -745,7 +745,7 @@ func (r *fakeAuthServer) PermissionTicketHandler(wrt http.ResponseWriter, req *h
 	response := Ticket{
 		Ticket: acc,
 	}
-	renderJSON(http.StatusOK, wrt, req, response)
+	renderJSON(http.StatusOK, wrt, response)
 }
 
 func getRandomString(n int) (string, error) {
@@ -762,7 +762,7 @@ func getRandomString(n int) (string, error) {
 	return string(runes), nil
 }
 
-func renderJSON(code int, w http.ResponseWriter, req *http.Request, data interface{}) {
+func renderJSON(code int, w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	if err := json.NewEncoder(w).Encode(data); err != nil {

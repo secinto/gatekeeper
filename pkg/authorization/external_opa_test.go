@@ -16,7 +16,7 @@ import (
 )
 
 type OpaTestInput struct {
-	Name    string `json:"name" yaml:"name"`
+	Name    string `json:"name"    yaml:"name"`
 	Surname string `json:"surname" yaml:"surname"`
 }
 

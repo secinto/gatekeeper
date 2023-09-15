@@ -186,7 +186,7 @@ type UserContext struct {
 	Email string
 	// the expiration of the access token
 	ExpiresAt time.Time
-	// groups is a collection of groups the user in in
+	// groups is a collection of groups where user is member
 	Groups []string
 	// a name of the user
 	Name string

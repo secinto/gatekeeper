@@ -26,8 +26,8 @@ require (
 	github.com/unrolled/secure v1.0.8
 	github.com/urfave/cli/v2 v2.25.7
 	go.uber.org/zap v1.19.0
-	golang.org/x/crypto v0.12.0
-	golang.org/x/net v0.14.0
+	golang.org/x/crypto v0.13.0
+	golang.org/x/net v0.15.0
 	golang.org/x/oauth2 v0.8.0
 	gopkg.in/redis.v4 v4.2.4
 	gopkg.in/square/go-jose.v2 v2.6.0
@@ -98,8 +98,8 @@ require (
 	go.uber.org/goleak v1.2.1 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	golang.org/x/sync v0.3.0 // indirect
-	golang.org/x/sys v0.11.0 // indirect
-	golang.org/x/text v0.12.0 // indirect
+	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
 	golang.org/x/tools v0.10.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230626202813-9b080da550b3 // indirect
@@ -111,4 +111,4 @@ require (
 	oras.land/oras-go/v2 v2.2.0 // indirect
 )
 
-go 1.19
+go 1.20

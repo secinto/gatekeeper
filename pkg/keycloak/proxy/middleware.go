@@ -489,14 +489,12 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					return provider.Authorize()
 				}
 
-				//nolint:contextcheck
-				decision, err = r.WithUMAIdentity(req, wrt, user, authzFunc)
+				decision, err = r.WithUMAIdentity(req, user, authzFunc)
 				if err != nil {
 					var umaUser *UserContext
 					scope.Logger.Error(err.Error())
 					scope.Logger.Info("trying to get new uma token")
 
-					//nolint:contextcheck
 					umaUser, err = r.refreshUmaToken(req, user, &methodScope)
 					if err != nil {
 						scope.Logger.Error(err.Error())
@@ -944,7 +942,7 @@ func (r *OauthProxy) proxyDenyMiddleware(next http.Handler) http.Handler {
 }
 
 // deny middleware
-func (r *OauthProxy) denyMiddleware(next http.Handler) http.Handler {
+func (r *OauthProxy) denyMiddleware(_ http.Handler) http.Handler {
 	r.Log.Info("enabling the deny middleware")
 
 	return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {

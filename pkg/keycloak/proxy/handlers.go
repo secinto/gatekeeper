@@ -54,8 +54,8 @@ func (r *OauthProxy) getRedirectionURL(wrt http.ResponseWriter, req *http.Reques
 
 	switch r.Config.RedirectionURL {
 	case "":
-		scheme := ""
-		host := ""
+		var scheme string
+		var host string
 
 		if r.Config.NoProxy && !r.Config.NoRedirects {
 			scheme = req.Header.Get("X-Forwarded-Proto")
@@ -138,7 +138,7 @@ func (r *OauthProxy) oauthAuthorizationHandler(wrt http.ResponseWriter, req *htt
 			oauth2.SetAuthURLParam(pkce.ParamCodeChallenge, codeChallenge),
 			oauth2.SetAuthURLParam(pkce.ParamCodeChallengeMethod, pkce.MethodS256),
 		)
-		r.writePKCECookie(req, wrt, codeVerifier)
+		r.writePKCECookie(wrt, codeVerifier)
 	}
 
 	authURL := conf.AuthCodeURL(
@@ -218,7 +218,7 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 		}
 
 		oidcTokensCookiesExp = time.Until(stdRefreshClaims.Expiry.Time())
-		encrypted, err = r.encryptToken(scope, refreshToken, r.Config.EncryptionKey, "refresh", writer, req)
+		encrypted, err = r.encryptToken(scope, refreshToken, r.Config.EncryptionKey, "refresh", writer)
 		if err != nil {
 			return
 		}
@@ -259,7 +259,7 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 		// access/refresh cookie as authentication already was done properly and user
 		// could try to get new uma token/cookie, e.g in case he tried first to access
 		// resource to which he doesn't have access
-		//nolint:contextcheck
+
 		token, erru := r.getRPT(req, redirectURI, accessToken, &methodScope)
 		umaError = erru
 		if token != nil {
@@ -269,18 +269,18 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 
 	// step: are we encrypting the access token?
 	if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
-		accessToken, err = r.encryptToken(scope, accessToken, r.Config.EncryptionKey, "access", writer, req)
+		accessToken, err = r.encryptToken(scope, accessToken, r.Config.EncryptionKey, "access", writer)
 		if err != nil {
 			return
 		}
 
-		identityToken, err = r.encryptToken(scope, identityToken, r.Config.EncryptionKey, "id", writer, req)
+		identityToken, err = r.encryptToken(scope, identityToken, r.Config.EncryptionKey, "id", writer)
 		if err != nil {
 			return
 		}
 
 		if r.Config.EnableUma && umaError == nil {
-			umaToken, err = r.encryptToken(scope, umaToken, r.Config.EncryptionKey, "uma", writer, req)
+			umaToken, err = r.encryptToken(scope, umaToken, r.Config.EncryptionKey, "uma", writer)
 			if err != nil {
 				return
 			}
@@ -607,7 +607,7 @@ func (r *OauthProxy) logoutHandler(writer http.ResponseWriter, req *http.Request
 		identityToken = refresh
 	}
 
-	idToken, _, err := r.retrieveIDToken(req, user)
+	idToken, _, err := r.retrieveIDToken(req)
 
 	// we are doing it so that in case with no-redirects=true, we can pass
 	// id token in authorization header
@@ -834,7 +834,7 @@ func (r *OauthProxy) retrieveRefreshToken(req *http.Request, user *UserContext) 
 }
 
 // retrieveIDToken retrieves the id token from cookie
-func (r *OauthProxy) retrieveIDToken(req *http.Request, user *UserContext) (string, string, error) {
+func (r *OauthProxy) retrieveIDToken(req *http.Request) (string, string, error) {
 	var token string
 	var err error
 	var encrypted string
@@ -845,7 +845,7 @@ func (r *OauthProxy) retrieveIDToken(req *http.Request, user *UserContext) (stri
 		return token, "", err
 	}
 
-	if r.Config.EnableEncryptedToken {
+	if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
 		encrypted = token
 		token, err = encryption.DecodeText(token, r.Config.EncryptionKey)
 	}
@@ -854,7 +854,7 @@ func (r *OauthProxy) retrieveIDToken(req *http.Request, user *UserContext) (stri
 }
 
 // discoveryHandler provides endpoint info
-func (r *OauthProxy) discoveryHandler(wrt http.ResponseWriter, req *http.Request) {
+func (r *OauthProxy) discoveryHandler(wrt http.ResponseWriter, _ *http.Request) {
 	resp := &DiscoveryResponse{
 		ExpiredURL: r.Config.WithOAuthURI(constant.ExpiredURL),
 		LogoutURL:  r.Config.WithOAuthURI(constant.LogoutURL),
