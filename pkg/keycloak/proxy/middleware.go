@@ -28,6 +28,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
+	"golang.org/x/oauth2"
 
 	"github.com/PuerkitoBio/purell"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
@@ -192,6 +193,18 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 
 			scope.Identity = user
 			ctx := context.WithValue(req.Context(), constant.ContextScopeName, scope)
+
+			if r.Config.EnableIDPSessionCheck {
+				tokenSource := oauth2.StaticTokenSource(
+					&oauth2.Token{AccessToken: user.RawToken},
+				)
+				_, err := r.Provider.UserInfo(ctx, tokenSource)
+				if err != nil {
+					//nolint:contextcheck
+					next.ServeHTTP(wrt, req.WithContext(r.redirectToAuthorization(wrt, req)))
+					return
+				}
+			}
 
 			// step: skip if we are running skip-token-verification
 			if r.Config.SkipTokenVerification {
