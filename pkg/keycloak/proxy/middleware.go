@@ -468,11 +468,20 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 				var methodScope *string
 				if r.Config.EnableUmaMethodScope {
 					ms := "method:" + req.Method
+					if r.Config.NoProxy {
+						xForwardedMethod := req.Header.Get("X-Forwarded-Method")
+						ms = "method:" + xForwardedMethod
+					}
 					methodScope = &ms
 				}
 
+				authzPath := req.URL.Path
+				if r.Config.NoProxy {
+					authzPath = req.Header.Get("X-Forwarded-URI")
+				}
+
 				authzFunc := func(
-					req *http.Request,
+					targetPath string,
 					userPerms authorization.Permissions,
 				) (authorization.AuthzDecision, error) {
 					r.pat.m.RLock()
@@ -480,7 +489,7 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					r.pat.m.RUnlock()
 					provider = authorization.NewKeycloakAuthorizationProvider(
 						userPerms,
-						req,
+						targetPath,
 						r.IdpClient,
 						r.Config.OpenIDProviderTimeout,
 						token,
@@ -490,13 +499,13 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					return provider.Authorize()
 				}
 
-				decision, err = r.WithUMAIdentity(req, user, authzFunc)
+				decision, err = r.WithUMAIdentity(req, authzPath, user, authzFunc)
 				if err != nil {
 					var umaUser *UserContext
 					scope.Logger.Error(err.Error())
 					scope.Logger.Info("trying to get new uma token")
 
-					umaUser, err = r.refreshUmaToken(req, user, methodScope)
+					umaUser, err = r.refreshUmaToken(req, authzPath, user, methodScope)
 					if err != nil {
 						scope.Logger.Error(err.Error())
 						//nolint:contextcheck
@@ -517,7 +526,7 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					r.dropUMATokenCookie(req, wrt, umaToken, time.Until(umaUser.ExpiresAt))
 					wrt.Header().Set(constant.UMAHeader, umaToken)
 					scope.Logger.Debug("got uma token")
-					decision, err = authzFunc(req, umaUser.Permissions)
+					decision, err = authzFunc(authzPath, umaUser.Permissions)
 				}
 			} else if r.Config.EnableOpa {
 				provider = authorization.NewOpaAuthorizationProvider(

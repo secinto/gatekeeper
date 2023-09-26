@@ -341,8 +341,9 @@ func (r *OauthProxy) getPAT(done chan bool) {
 
 func (r *OauthProxy) WithUMAIdentity(
 	req *http.Request,
+	targetPath string,
 	user *UserContext,
-	authzFunc func(req *http.Request, userPerms authorization.Permissions) (authorization.AuthzDecision, error),
+	authzFunc func(targetPath string, userPerms authorization.Permissions) (authorization.AuthzDecision, error),
 ) (authorization.AuthzDecision, error) {
 	umaUser, err := r.GetIdentity(req, r.Config.CookieUMAName, constant.UMAHeader)
 	if err != nil {
@@ -354,7 +355,7 @@ func (r *OauthProxy) WithUMAIdentity(
 		return authorization.DeniedAuthz, err
 	}
 
-	return authzFunc(req, umaUser.Permissions)
+	return authzFunc(targetPath, umaUser.Permissions)
 }
 
 // getRPT retrieves relaying party token
@@ -733,10 +734,11 @@ func (r *OauthProxy) getRequestURIFromCookie(
 
 func (r *OauthProxy) refreshUmaToken(
 	req *http.Request,
+	targetPath string,
 	user *UserContext,
 	methodScope *string,
 ) (*UserContext, error) {
-	tok, err := r.getRPT(req, req.URL.Path, user.RawToken, methodScope)
+	tok, err := r.getRPT(req, targetPath, user.RawToken, methodScope)
 	if err != nil {
 		return nil, err
 	}

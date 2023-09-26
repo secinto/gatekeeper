@@ -2,7 +2,6 @@ package authorization
 
 import (
 	"context"
-	"net/http"
 	"time"
 
 	"github.com/Nerzal/gocloak/v12"
@@ -23,7 +22,7 @@ var _ Provider = (*KeycloakAuthorizationProvider)(nil)
 
 type KeycloakAuthorizationProvider struct {
 	perms       Permissions
-	req         *http.Request
+	targetPath  string
 	idpClient   *gocloak.GoCloak
 	idpTimeout  time.Duration
 	pat         string
@@ -33,7 +32,7 @@ type KeycloakAuthorizationProvider struct {
 
 func NewKeycloakAuthorizationProvider(
 	perms Permissions,
-	req *http.Request,
+	targetPath string,
 	idpClient *gocloak.GoCloak,
 	idpTimeout time.Duration,
 	PAT string,
@@ -42,7 +41,7 @@ func NewKeycloakAuthorizationProvider(
 ) Provider {
 	return &KeycloakAuthorizationProvider{
 		perms:       perms,
-		req:         req,
+		targetPath:  targetPath,
 		idpClient:   idpClient,
 		idpTimeout:  idpTimeout,
 		pat:         PAT,
@@ -65,7 +64,7 @@ func (p *KeycloakAuthorizationProvider) Authorize() (AuthzDecision, error) {
 
 	matchingURI := true
 	resourceParam := gocloak.GetResourceParams{
-		URI:         &p.req.URL.Path,
+		URI:         &p.targetPath,
 		MatchingURI: &matchingURI,
 		Scope:       p.methodScope,
 	}
