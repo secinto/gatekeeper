@@ -248,6 +248,10 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 		}
 	}
 
+	if r.Config.PostLoginRedirectPath != "" && redirectURI == "/" {
+		redirectURI = r.Config.PostLoginRedirectPath
+	}
+
 	var umaToken string
 	var umaError error
 	if r.Config.EnableUma {

@@ -33,4 +33,5 @@ var (
 	ErrPKCEWithCodeOnly                = errors.New("pkce can be enabled only with no-redirect=false")
 	ErrPKCECodeCreation                = errors.New("creation of code verifier failed")
 	ErrPKCECookieEmpty                 = errors.New("seems that pkce code verifier cookie value is empty string")
+	ErrInvalidPostLoginRedirectPath    = errors.New("post login redirect path invalid, should be only path not absolute url (no hostname, scheme)")
 )

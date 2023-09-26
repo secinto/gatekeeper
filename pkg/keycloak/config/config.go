@@ -60,6 +60,9 @@ type Config struct {
 	RedirectionURL string `env:"REDIRECTION_URL" json:"redirection-url" usage:"redirection url for the oauth callback url, defaults to host header if absent" yaml:"redirection-url"`
 	// PostLogoutRedirectUri the url to which is redirected after logout
 	PostLogoutRedirectURI string `env:"POST_LOGOUT_REDIRECT_URI" json:"post-logout-redirect-uri" usage:"url to which client is redirected after successful logout" yaml:"post-logout-redirect-uri"`
+	// PostLoginRedirectPath path to which is redirected after login
+	PostLoginRedirectPath string `env:"POST_LOGIN_REDIRECT_PATH" json:"post-login-redirect-path" usage:"path to which client is redirected after successful login" yaml:"post-login-redirect-path"`
+
 	// RevocationEndpoint is the token revocation endpoint to revoke refresh tokens
 	RevocationEndpoint string `env:"REVOCATION_URL" json:"revocation-url" usage:"url for the revocation endpoint to revoke refresh token" yaml:"revocation-url"`
 	// SkipOpenIDProviderTLSVerify skips the tls verification for openid provider communication
@@ -679,6 +682,7 @@ func (r *Config) isReverseProxySettingsValid() error {
 			r.isResourceValid,
 			r.isMatchClaimValid,
 			r.isPKCEValid,
+			r.isPostLoginRedirectValid,
 		}
 
 		for _, validationFunc := range validationRegistry {
@@ -991,6 +995,19 @@ func (r *Config) extractDiscoveryURIComponents() error {
 func (r *Config) isPKCEValid() error {
 	if r.NoRedirects && r.EnablePKCE {
 		return apperrors.ErrPKCEWithCodeOnly
+	}
+	return nil
+}
+
+func (r *Config) isPostLoginRedirectValid() error {
+	if r.PostLoginRedirectPath != "" {
+		parsedURI, err := url.ParseRequestURI(r.PostLoginRedirectPath)
+		if err != nil {
+			return err
+		}
+		if parsedURI.Host != "" || parsedURI.Scheme != "" {
+			return apperrors.ErrInvalidPostLoginRedirectPath
+		}
 	}
 	return nil
 }
