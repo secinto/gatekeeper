@@ -480,17 +480,29 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 			if r.Config.EnableUma {
 				var methodScope *string
 				if r.Config.EnableUmaMethodScope {
-					ms := "method:" + req.Method
+					methSc := "method:" + req.Method
 					if r.Config.NoProxy {
 						xForwardedMethod := req.Header.Get("X-Forwarded-Method")
-						ms = "method:" + xForwardedMethod
+						if xForwardedMethod == "" {
+							scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
+							//nolint:contextcheck
+							next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+							return
+						}
+						methSc = "method:" + xForwardedMethod
 					}
-					methodScope = &ms
+					methodScope = &methSc
 				}
 
 				authzPath := req.URL.Path
 				if r.Config.NoProxy {
 					authzPath = req.Header.Get("X-Forwarded-URI")
+					if authzPath == "" {
+						scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
+						//nolint:contextcheck
+						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						return
+					}
 				}
 
 				authzFunc := func(

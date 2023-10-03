@@ -1000,6 +1000,9 @@ func (r *Config) isPKCEValid() error {
 }
 
 func (r *Config) isPostLoginRedirectValid() error {
+	if r.PostLoginRedirectPath != "" && r.NoRedirects {
+		return apperrors.ErrPostLoginRedirectPathNoRedirectsInvalid
+	}
 	if r.PostLoginRedirectPath != "" {
 		parsedURI, err := url.ParseRequestURI(r.PostLoginRedirectPath)
 		if err != nil {

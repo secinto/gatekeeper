@@ -2280,3 +2280,58 @@ func TestIsPKCEValid(t *testing.T) {
 		)
 	}
 }
+
+func TestIsPostLoginRedirectValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "OK",
+			Config: &Config{
+				PostLoginRedirectPath: "/some/path",
+			},
+			Valid: true,
+		},
+		{
+			Name: "OK complex URI",
+			Config: &Config{
+				PostLoginRedirectPath: "/some/path?someparam=lala",
+			},
+			Valid: true,
+		},
+		{
+			Name: "InvalidPostLoginRedirectPath",
+			Config: &Config{
+				PostLoginRedirectPath: "http://somehost/some/path",
+			},
+			Valid: false,
+		},
+		{
+			Name: "InvalidCombinationPostLoginRedirectPathWithNoRedirects",
+			Config: &Config{
+				PostLoginRedirectPath: "/some/path",
+				NoRedirects:           true,
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isPostLoginRedirectValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}
