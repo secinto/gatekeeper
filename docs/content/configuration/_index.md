@@ -15,6 +15,7 @@ weight: 2
 |    --client-secret value                   | client secret used to authenticate to the oauth service | | PROXY_CLIENT_SECRET
 |    --redirection-url value                 | redirection url for the oauth callback url, defaults to host header if absent | | PROXY_REDIRECTION_URL
 |    --post-logout-redirect-uri value        | url to which client is redirected after successful logout | | PROXY_POST_LOGOUT_REDIRECT_URI
+|    --post-login-redirect-path value        | post-login-redirect-path" usage:"path to which client is redirected after successful login, in case user access / | | PROXY_POST_LOGIN_REDIRECT_PATH
 |    --revocation-url value                  | url for the revocation endpoint to revoke refresh token | | PROXY_REVOCATION_URL
 |    --skip-openid-provider-tls-verify       | skip the verification of any TLS communication with the openid provider | false | PROXY_SKIP_OPENID_PROVIDER_TLSVERIFY
 |    --openid-provider-proxy value           | proxy for communication with the openid provider | | PROXY_OPENID_PROVIDER_PROXY
@@ -60,7 +61,8 @@ weight: 2
 |    --content-security-policy value         | specify the content security policy | | PROXY_CONTENT_SECURITY_POLICY
 |    --localhost-metrics                     | enforces the metrics page can only been requested from 127.0.0.1 | false | PROXY_LOCALHOST_METRICS
 |    --enable-compression                    | enable gzip compression for response | false | PROXY_ENABLE_COMPRESSION
-|    --enable-pkce                           | enable pkce for auth code flow, only S256 code challenge supported | false | ENABLE_PKCE
+|    --enable-pkce                           | enable pkce for auth code flow, only S256 code challenge supported | false | PROXY_ENABLE_PKCE
+|    --enable-idp-session-check              | during token validation it also checks if user session is still present, useful for multi app logout | false | PROXY_ENABLE_IDP_SESSION_CHECK
 |    --enable-uma                            | enable UMA authorization, please don't use in production as it is new feature, we would like to receive feedback first             | false | PROXY_ENABLE_UMA
 |	 --enable-opa                            | enable authorization with external Open policy agent  | false | PROXY_ENABLE_OPA
 |	 --opa-timeout                           | timeout for connection to OPA                         |   10s | PROXY_OPA_TIMEOUT
@@ -79,6 +81,7 @@ weight: 2
 |    --same-site-cookie value                | enforces cookies to be send only to same site requests according to the policy (can be \| Strict\|Lax\|None) | Lax | PROXY_SAME_SITE_COOKIE
 |    --match-claims value                    | keypair values for matching access token claims e.g. aud=myapp, iss=http://example.* | |
 |    --add-claims value                      | extra claims from the token and inject into headers, e.g given_name -> X-Auth-Given-Name | |
+|    --enable-uma-method-scope               | enables passing request method as 'method:GET' scope to keycloak for authorization | false | PROXY_ENABLE_UMA_METHOD_SCOPE
 |    --tls-min-version                       | specify server minimal TLS version one of tlsv1.0,tlsv1.1,tlsv1.2,tlsv1.3 | | TLS_MIN_VERSION |
 |    --tls-cert value                        | path to ths TLS certificate | | PROXY_TLS_CERTIFICATE
 |    --tls-private-key value                 | path to the private key for TLS | | PROXY_TLS_PRIVATE_KEY

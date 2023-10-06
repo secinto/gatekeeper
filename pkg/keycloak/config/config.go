@@ -61,7 +61,7 @@ type Config struct {
 	// PostLogoutRedirectUri the url to which is redirected after logout
 	PostLogoutRedirectURI string `env:"POST_LOGOUT_REDIRECT_URI" json:"post-logout-redirect-uri" usage:"url to which client is redirected after successful logout" yaml:"post-logout-redirect-uri"`
 	// PostLoginRedirectPath path to which is redirected after login
-	PostLoginRedirectPath string `env:"POST_LOGIN_REDIRECT_PATH" json:"post-login-redirect-path" usage:"path to which client is redirected after successful login" yaml:"post-login-redirect-path"`
+	PostLoginRedirectPath string `env:"POST_LOGIN_REDIRECT_PATH" json:"post-login-redirect-path" usage:"path to which client is redirected after successful login, in case user access /" yaml:"post-login-redirect-path"`
 
 	// RevocationEndpoint is the token revocation endpoint to revoke refresh tokens
 	RevocationEndpoint string `env:"REVOCATION_URL" json:"revocation-url" usage:"url for the revocation endpoint to revoke refresh token" yaml:"revocation-url"`
@@ -156,12 +156,12 @@ type Config struct {
 	// EnableCompression enables gzip compression for response
 	EnableCompression bool `env:"ENABLE_COMPRESSION" json:"enable-compression" usage:"enable gzip compression for response" yaml:"enable-compression"`
 	// EnablePKCE, only S256 code challenge method is supported
-	EnablePKCE            bool          `env:"ENABLE_PKCE"              json:"enable-pkce"              usage:"enable pkce for auth code flow, only S256 code challenge supported"                                   yaml:"enable-pkce"`
-	EnableIDPSessionCheck bool          `env:"ENABLE_IDP_SESSION_CHECK" json:"enable_idp_session_check" usage:"during token validation it also checks if user session is still present, useful for crosstabs logout" yaml:"enable-idp-session-check"`
-	EnableUma             bool          `env:"ENABLE_UMA"               json:"enable-uma"               usage:"enable uma authorization, please don't use it in production, we would like to receive feedback"       yaml:"enable-uma"`
-	EnableOpa             bool          `env:"ENABLE_OPA"               json:"enable-opa"               usage:"enable authorization with external Open policy agent"                                                 yaml:"enable-opa"`
-	OpaTimeout            time.Duration `env:"OPA_TIMEOUT"              json:"opa-timeout"              usage:"timeout for connection to OPA"                                                                        yaml:"opa-timeout"`
-	OpaAuthzURI           string        `env:"OPA_AUTHZ_URI"            json:"opa-authz-uri"            usage:"OPA endpoint address with path"                                                                       yaml:"opa-authz-uri"`
+	EnablePKCE            bool          `env:"ENABLE_PKCE"              json:"enable-pkce"              usage:"enable pkce for auth code flow, only S256 code challenge supported"                                  yaml:"enable-pkce"`
+	EnableIDPSessionCheck bool          `env:"ENABLE_IDP_SESSION_CHECK" json:"enable_idp_session_check" usage:"during token validation it also checks if user session is still present, useful for multiapp logout" yaml:"enable-idp-session-check"`
+	EnableUma             bool          `env:"ENABLE_UMA"               json:"enable-uma"               usage:"enable uma authorization, please don't use it in production, we would like to receive feedback"      yaml:"enable-uma"`
+	EnableOpa             bool          `env:"ENABLE_OPA"               json:"enable-opa"               usage:"enable authorization with external Open policy agent"                                                yaml:"enable-opa"`
+	OpaTimeout            time.Duration `env:"OPA_TIMEOUT"              json:"opa-timeout"              usage:"timeout for connection to OPA"                                                                       yaml:"opa-timeout"`
+	OpaAuthzURI           string        `env:"OPA_AUTHZ_URI"            json:"opa-authz-uri"            usage:"OPA endpoint address with path"                                                                      yaml:"opa-authz-uri"`
 
 	PatRetryCount    int           `env:"PAT_RETRY_COUNT"    json:"pat-retry-count"    usage:"number of retries to get PAT"        yaml:"pat-retry-count"`
 	PatRetryInterval time.Duration `env:"PAT_RETRY_INTERVAL" json:"pat-retry-interval" usage:"interval between retries to get PAT" yaml:"pat-retry-interval"`

@@ -346,7 +346,7 @@ in Keycloak, providing granular role controls over issue tokens.
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:2.7.0
+  image: quay.io/gogatekeeper/gatekeeper:2.8.0
   args:
   - --enable-forwarding=true
   - --forwarding-username=projecta
@@ -373,7 +373,7 @@ Example setup client credentials grant:
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:2.7.0
+  image: quay.io/gogatekeeper/gatekeeper:2.8.0
   args:
   - --enable-forwarding=true
   - --forwarding-domains=projecta.svc.cluster.local
@@ -809,6 +809,14 @@ To enable a local Redis store use `redis://[USER:PASSWORD@]HOST:PORT`.
 In both cases, the refresh token is encrypted before being placed into
 the store.
 
+## Post Login Redirect
+
+Without this option if user comes to site protected by gatekeeper e.g. `http://somesite/somepath`, user
+will be redirected to login and after login back to `http://somesite/path`. If user comes to `/` before login
+he will be redirected back to `/`. Sometimes you want redirect user back not to `/` but some path. For this
+there is option `--post-login-redirect-path=/fallback/path` which enables you to define some path to which user will be redirected
+after login if user comes to root path `/`. 
+
 ## Logout endpoint
 
 There are 2 possibilities how to logout:
@@ -836,6 +844,12 @@ There are 2 possibilities how to logout:
    Post Logout Redirection - you can specify url in `--post-logout-redirect-uri` option, this logout mechanism uses
    id token for logging out, in case of code flow this is gathered automatically from id token cookie. In case of
    `--no-redirects=true` you have to pass id token in authorization header.
+
+### Session logout
+
+Many times there are cases when you have multiple applications (multiple keycloak clients for gatekeeper) and you would
+like to achieve that logout on one application causes logout also on other application. For this use case there is option
+`--enable-idp-session-check=true` together with `--enable-logout-redirect=true`.
 
 ## Cross-origin resource sharing (CORS)
 
