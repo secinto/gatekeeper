@@ -17,7 +17,6 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -491,7 +490,7 @@ func (r *Config) HasCustomErrorPage() bool {
 
 func (r *Config) isListenValid() error {
 	if r.Listen == "" {
-		return errors.New("you have not specified the listening interface")
+		return apperrors.ErrMissingListenInterface
 	}
 	return nil
 }
@@ -499,7 +498,7 @@ func (r *Config) isListenValid() error {
 func (r *Config) isListenAdminSchemeValid() error {
 	if r.ListenAdminScheme != constant.SecureScheme &&
 		r.ListenAdminScheme != constant.UnsecureScheme {
-		return errors.New("scheme for admin listener must be one of [http, https]")
+		return apperrors.ErrAdminListenerScheme
 	}
 	return nil
 }
@@ -509,7 +508,7 @@ func (r *Config) isOpenIDProviderProxyValid() error {
 		_, err := url.ParseRequestURI(r.OpenIDProviderProxy)
 
 		if err != nil {
-			return errors.New("invalid proxy address for open IDP provider proxy")
+			return apperrors.ErrInvalidIdpProviderProxyURI
 		}
 	}
 
@@ -518,14 +517,11 @@ func (r *Config) isOpenIDProviderProxyValid() error {
 
 func (r *Config) isMaxIdlleConnValid() error {
 	if r.MaxIdleConns <= 0 {
-		return errors.New("max-idle-connections must be a number > 0")
+		return apperrors.ErrInvalidMaxIdleConnections
 	}
 
 	if r.MaxIdleConnsPerHost < 0 || r.MaxIdleConnsPerHost > r.MaxIdleConns {
-		return errors.New(
-			"maxi-idle-connections-per-host must be a " +
-				"number > 0 and <= max-idle-connections",
-		)
+		return apperrors.ErrInvalidMaxIdleConnsPerHost
 	}
 	return nil
 }
@@ -533,7 +529,7 @@ func (r *Config) isMaxIdlleConnValid() error {
 func (r *Config) isSameSiteValid() error {
 	if r.SameSiteCookie != "" && r.SameSiteCookie != constant.SameSiteStrict &&
 		r.SameSiteCookie != constant.SameSiteLax && r.SameSiteCookie != constant.SameSiteNone {
-		return errors.New("same-site-cookie must be one of Strict|Lax|None")
+		return apperrors.ErrInvalidSameSiteCookie
 	}
 	return nil
 }
@@ -541,11 +537,11 @@ func (r *Config) isSameSiteValid() error {
 //nolint:cyclop
 func (r *Config) isTLSFilesValid() error {
 	if r.TLSCertificate != "" && r.TLSPrivateKey == "" {
-		return errors.New("you have not provided a private key")
+		return apperrors.ErrMissingPrivateKey
 	}
 
 	if r.TLSPrivateKey != "" && r.TLSCertificate == "" {
-		return errors.New("you have not provided a certificate file")
+		return apperrors.ErrMissingCert
 	}
 
 	if r.TLSCertificate != "" && !utils.FileExists(r.TLSCertificate) {
@@ -576,13 +572,11 @@ func (r *Config) isTLSFilesValid() error {
 //nolint:cyclop
 func (r *Config) isAdminTLSFilesValid() error {
 	if r.TLSAdminCertificate != "" && r.TLSAdminPrivateKey == "" {
-		return errors.New("you have not provided a private key for admin endpoint")
+		return apperrors.ErrMissingAdminEndpointPrivateKey
 	}
 
 	if r.TLSAdminPrivateKey != "" && r.TLSAdminCertificate == "" {
-		return errors.New(
-			"you have not provided a certificate file for admin endpoint",
-		)
+		return apperrors.ErrMissingAdminEndpointCert
 	}
 
 	if r.TLSAdminCertificate != "" && !utils.FileExists(r.TLSAdminCertificate) {
@@ -618,7 +612,7 @@ func (r *Config) isAdminTLSFilesValid() error {
 
 func (r *Config) isLetsEncryptValid() error {
 	if r.UseLetsEncrypt && r.LetsEncryptCacheDir == "" {
-		return fmt.Errorf("the letsencrypt cache dir has not been set")
+		return apperrors.ErrMissingLetsEncryptCacheDir
 	}
 	return nil
 }
@@ -626,13 +620,13 @@ func (r *Config) isLetsEncryptValid() error {
 func (r *Config) isTLSMinValid() error {
 	switch strings.ToLower(r.TLSMinVersion) {
 	case "":
-		return fmt.Errorf("minimal TLS version should not be empty")
+		return apperrors.ErrMinimalTLSVersionEmpty
 	case "tlsv1.0":
 	case "tlsv1.1":
 	case "tlsv1.2":
 	case "tlsv1.3":
 	default:
-		return fmt.Errorf("invalid minimal TLS version specified")
+		return apperrors.ErrInvalidMinimalTLSVersion
 	}
 	return nil
 }
@@ -645,17 +639,13 @@ func (r *Config) isForwardingProxySettingsValid() error {
 			r.isForwardingGrantValid,
 			func() error {
 				if r.TLSCertificate != "" {
-					return errors.New("you don't need to specify a " +
-						"tls-certificate, use tls-ca-certificate instead",
-					)
+					return apperrors.ErrInvalidForwardTLSCertOpt
 				}
 				return nil
 			},
 			func() error {
 				if r.TLSPrivateKey != "" {
-					return errors.New("you don't need to specify the " +
-						"tls-private-key, use tls-ca-key instead",
-					)
+					return apperrors.ErrInvalidForwardTLSKeyOpt
 				}
 				return nil
 			},
@@ -725,17 +715,14 @@ func (r *Config) isTokenVerificationSettingsValid() error {
 
 func (r *Config) isNoProxyValid() error {
 	if r.NoProxy && !r.NoRedirects && r.RedirectionURL != "" {
-		return errors.New("when in forward-auth mode - " +
-			"noproxy=true with noredirect=false, redirectionURL " +
-			"should not be set, will be composed from X-FORWARDED-* headers",
-		)
+		return apperrors.ErrRedundantRedirectURIinForwardAuthMode
 	}
 	return nil
 }
 
 func (r *Config) isUpstreamValid() error {
 	if r.Upstream == "" && !r.NoProxy {
-		return errors.New("you have not specified an upstream endpoint to proxy to")
+		return apperrors.ErrMissingUpstream
 	}
 
 	if !r.NoProxy {
@@ -753,14 +740,14 @@ func (r *Config) isUpstreamValid() error {
 
 func (r *Config) isClientIDValid() error {
 	if r.ClientID == "" {
-		return errors.New("you have not specified the client id")
+		return apperrors.ErrMissingClientID
 	}
 	return nil
 }
 
 func (r *Config) isDiscoveryURLValid() error {
 	if r.DiscoveryURL == "" {
-		return errors.New("you have not specified the discovery url")
+		return apperrors.ErrMissingDiscoveryURI
 	}
 	return nil
 }
@@ -768,16 +755,16 @@ func (r *Config) isDiscoveryURLValid() error {
 func (r *Config) isForwardingGrantValid() error {
 	if r.ForwardingGrantType == core.GrantTypeUserCreds {
 		if r.ForwardingUsername == "" {
-			return errors.New("no forwarding username")
+			return apperrors.ErrMissingForwardUser
 		}
 		if r.ForwardingPassword == "" {
-			return errors.New("no forwarding password")
+			return apperrors.ErrMissingForwardPass
 		}
 	}
 
 	if r.ForwardingGrantType == core.GrantTypeClientCreds {
 		if r.ClientSecret == "" {
-			return errors.New("you have not specified the client secret")
+			return apperrors.ErrMissingClientSecret
 		}
 	}
 
@@ -787,36 +774,23 @@ func (r *Config) isForwardingGrantValid() error {
 func (r *Config) isSecurityFilterValid() error {
 	if !r.EnableSecurityFilter {
 		if r.EnableHTTPSRedirect {
-			return errors.New(
-				"the security filter must be switch on for this feature: http-redirect",
-			)
+			return apperrors.ErrSecFilterDisabledForHTTPSRedirect
 		}
 
 		if r.EnableBrowserXSSFilter {
-			return errors.New(
-				"the security filter must be switch on " +
-					"for this feature: brower-xss-filter",
-			)
+			return apperrors.ErrSecFilterDisabledForXSSFilter
 		}
 
 		if r.EnableFrameDeny {
-			return errors.New(
-				"the security filter must be switch on " +
-					"for this feature: frame-deny-filter",
-			)
+			return apperrors.ErrSecFilterDisabledForFrameDenyFilter
 		}
 
 		if r.ContentSecurityPolicy != "" {
-			return errors.New(
-				"the security filter must be switch on " +
-					"for this feature: content-security-policy",
-			)
+			return apperrors.ErrSecFilterDisabledForCSPFilter
 		}
 
 		if len(r.Hostnames) > 0 {
-			return errors.New(
-				"the security filter must be switch on for this feature: hostnames",
-			)
+			return apperrors.ErrSecFilterDisabledForHostnames
 		}
 	}
 
@@ -826,15 +800,11 @@ func (r *Config) isSecurityFilterValid() error {
 func (r *Config) isTokenEncryptionValid() error {
 	if (r.EnableEncryptedToken || r.ForceEncryptedCookie) &&
 		r.EncryptionKey == "" {
-		return errors.New(
-			"you have not specified an encryption key for encoding the access token",
-		)
+		return apperrors.ErrMissingEncryptionKey
 	}
 
 	if r.EnableRefreshTokens && r.EncryptionKey == "" {
-		return errors.New(
-			"enable refresh tokens requires encryption key to be defined",
-		)
+		return apperrors.ErrMissingEncryptionKeyForRefreshTokens
 	}
 
 	if r.EnableRefreshTokens && (len(r.EncryptionKey) != 16 &&
@@ -852,9 +822,7 @@ func (r *Config) isTokenEncryptionValid() error {
 func (r *Config) isSecureCookieValid() error {
 	if !r.NoRedirects && r.SecureCookie && r.RedirectionURL != "" &&
 		!strings.HasPrefix(r.RedirectionURL, "https") {
-		return errors.New(
-			"the cookie is set to secure but your redirection url is non-tls",
-		)
+		return apperrors.ErrSecureCookieWithNonTLSRedirectionURI
 	}
 
 	return nil
@@ -915,16 +883,12 @@ func (r *Config) isMatchClaimValid() error {
 
 func (r *Config) isExternalAuthzValid() error {
 	if r.EnableUma && r.EnableOpa {
-		return errors.New(
-			"only one type of external authz can be enabled at once",
-		)
+		return apperrors.ErrTooManyExtAuthzEnabled
 	}
 
 	if r.EnableUma {
 		if r.ClientID == "" || r.ClientSecret == "" {
-			return errors.New(
-				"enable uma requires client credentials",
-			)
+			return apperrors.ErrMissingClientCredsWithUMA
 		}
 	} else if r.EnableOpa {
 		authzURL, err := url.ParseRequestURI(r.OpaAuthzURI)
@@ -941,9 +905,7 @@ func (r *Config) isExternalAuthzValid() error {
 
 func (r *Config) isDefaultDenyValid() error {
 	if r.EnableDefaultDeny && r.EnableDefaultDenyStrict {
-		return errors.New(
-			"only one of enable-default-deny/enable-default-deny-strict can be true",
-		)
+		return apperrors.ErrTooManyDefaultDenyOpts
 	}
 	return nil
 }
