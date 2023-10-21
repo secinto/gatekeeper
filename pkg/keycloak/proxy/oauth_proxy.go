@@ -12,6 +12,7 @@ import (
 
 	"github.com/Nerzal/gocloak/v12"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
+	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
@@ -129,14 +130,14 @@ func ExtractIdentity(token *jwt.JSONWebToken) (*UserContext, error) {
 		scopes, assertOk := list.(map[string]interface{})
 
 		if !assertOk {
-			return nil, fmt.Errorf("assertion failed")
+			return nil, apperrors.ErrAssertionFailed
 		}
 
 		if roles, found := scopes[constant.ClaimResourceRoles]; found {
 			rolesVal, assertOk := roles.([]interface{})
 
 			if !assertOk {
-				return nil, fmt.Errorf("assertion failed")
+				return nil, apperrors.ErrAssertionFailed
 			}
 
 			for _, r := range rolesVal {

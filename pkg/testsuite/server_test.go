@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -492,7 +493,7 @@ func TestSkipOpenIDProviderTLSVerifyForwardingProxy(t *testing.T) {
 			failure, assertOk := r.(string)
 
 			if !assertOk {
-				t.Fatalf("assertion failed")
+				t.Fatalf(apperrors.ErrAssertionFailed.Error())
 			}
 
 			check := strings.Contains(
@@ -617,7 +618,7 @@ func TestSkipOpenIDProviderTLSVerify(t *testing.T) {
 			failure, assertOk := r.(string)
 
 			if !assertOk {
-				t.Fatalf("assertion failed")
+				t.Fatalf(apperrors.ErrAssertionFailed.Error())
 			}
 
 			check := strings.Contains(
@@ -663,7 +664,7 @@ func TestOpenIDProviderProxy(t *testing.T) {
 			failure, assertOk := r.(string)
 
 			if !assertOk {
-				t.Fatalf("assertion failed")
+				t.Fatalf(apperrors.ErrAssertionFailed.Error())
 			}
 
 			check := strings.Contains(

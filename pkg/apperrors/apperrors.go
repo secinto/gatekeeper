@@ -5,6 +5,7 @@ import (
 )
 
 var (
+	ErrAssertionFailed                 = errors.New("assertion failed")
 	ErrPermissionNotInToken            = errors.New("permissions missing in token")
 	ErrResourceRetrieve                = errors.New("problem getting resources from IDP")
 	ErrTokenScopeNotMatchResourceScope = errors.New("scopes in token doesn't match scopes in IDP resource")
@@ -18,7 +19,7 @@ var (
 	ErrNoAuthzFound                    = errors.New("no authz found")
 	ErrGetIdentityFromUMA              = errors.New("problem getting identity from uma token")
 	ErrFailedAuthzRequest              = errors.New("unexpected error occurred during authz request")
-	ErrSessionNotFound                 = errors.New("authentication session not found")
+	ErrSessionNotFound                 = errors.New("authentication session not found in request")
 	ErrNoSessionStateFound             = errors.New("no session state found")
 	ErrZeroLengthToken                 = errors.New("token has zero length")
 	ErrInvalidSession                  = errors.New("invalid session identifier")
@@ -33,6 +34,18 @@ var (
 	ErrPKCEWithCodeOnly                = errors.New("pkce can be enabled only with no-redirect=false")
 	ErrPKCECodeCreation                = errors.New("creation of code verifier failed")
 	ErrPKCECookieEmpty                 = errors.New("seems that pkce code verifier cookie value is empty string")
+
+	ErrSessionExpiredVerifyOff  = errors.New("the session has expired and verification switch off")
+	ErrAccTokenVerifyFailure    = errors.New("access token failed verification")
+	ErrSessionExpiredRefreshOff = errors.New("session expired and access token refreshing is disabled")
+	ErrRefreshTokenNotFound     = errors.New("unable to find refresh token for user")
+	ErrAccTokenRefreshFailure   = errors.New("failed to refresh the access token")
+	ErrEncryptAccToken          = errors.New("unable to encode access token")
+	ErrEncryptRefreshToken      = errors.New("failed to encrypt refresh token")
+	ErrEncryptIDToken           = errors.New("unable to encode idToken token")
+
+	ErrDelTokFromStore = errors.New("failed to remove old token")
+	ErrSaveTokToStore  = errors.New("failed to store refresh token")
 
 	// config errors
 

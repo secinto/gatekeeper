@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
@@ -41,9 +42,7 @@ func (r *OauthProxy) proxyMiddleware(next http.Handler) http.Handler {
 			scope, assertOk = ctxVal.(*RequestScope)
 
 			if !assertOk {
-				r.Log.Error(
-					"assertion failed",
-				)
+				r.Log.Error(apperrors.ErrAssertionFailed.Error())
 				return
 			}
 

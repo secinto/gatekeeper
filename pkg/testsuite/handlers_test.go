@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
@@ -269,7 +270,7 @@ func TestSkipOpenIDProviderTLSVerifyLoginHandler(t *testing.T) {
 			failure, assertOk := r.(string)
 
 			if !assertOk {
-				t.Fatalf("assertion failed")
+				t.Fatalf(apperrors.ErrAssertionFailed.Error())
 			}
 
 			check := strings.Contains(
@@ -679,7 +680,7 @@ func TestSkipOpenIDProviderTLSVerifyLogoutHandler(t *testing.T) {
 			failure, assertOk := r.(string)
 
 			if !assertOk {
-				t.Fatalf("assertion failed")
+				t.Fatalf(apperrors.ErrAssertionFailed.Error())
 			}
 
 			check := strings.Contains(

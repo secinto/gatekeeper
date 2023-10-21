@@ -45,6 +45,7 @@ import (
 	"github.com/elazarl/goproxy"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -482,7 +483,7 @@ func (r *OauthProxy) createForwardingProxy() error {
 	proxy, assertOk := r.Upstream.(*goproxy.ProxyHttpServer)
 
 	if !assertOk {
-		return fmt.Errorf("assertion failed")
+		return apperrors.ErrAssertionFailed
 	}
 
 	r.Router = proxy
@@ -515,7 +516,7 @@ func (r *OauthProxy) createForwardingProxy() error {
 			if r.Config.EnableLogging {
 				start, assertOk := ctx.UserData.(time.Time)
 				if !assertOk {
-					r.Log.Error("assertion failed")
+					r.Log.Error(apperrors.ErrAssertionFailed.Error())
 					return nil
 				}
 
@@ -977,7 +978,7 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 	upstreamProxy, assertOk := r.Upstream.(*goproxy.ProxyHttpServer)
 
 	if !assertOk {
-		return fmt.Errorf("assertion failed")
+		return apperrors.ErrAssertionFailed
 	}
 
 	upstreamProxy.Tr = &http.Transport{

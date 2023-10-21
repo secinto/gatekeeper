@@ -78,7 +78,7 @@ func (r *OauthProxy) revokeProxy(req *http.Request) context.Context {
 		scope, assertOk = ctxVal.(*RequestScope)
 
 		if !assertOk {
-			r.Log.Error("assertion failed")
+			r.Log.Error(apperrors.ErrAssertionFailed.Error())
 			scope = &RequestScope{AccessDenied: true}
 		}
 	}

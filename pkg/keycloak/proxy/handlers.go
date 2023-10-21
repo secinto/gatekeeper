@@ -102,9 +102,7 @@ func (r *OauthProxy) oauthAuthorizationHandler(wrt http.ResponseWriter, req *htt
 	scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
 
 	if !assertOk {
-		r.Log.Error(
-			"assertion failed",
-		)
+		r.Log.Error(apperrors.ErrAssertionFailed.Error())
 		return
 	}
 
@@ -185,7 +183,7 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 
 	scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
 	if !assertOk {
-		r.Log.Error("assertion failed")
+		r.Log.Error(apperrors.ErrAssertionFailed.Error())
 		return
 	}
 
@@ -318,9 +316,7 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 	scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
 
 	if !assertOk {
-		r.Log.Error(
-			"assertion failed",
-		)
+		r.Log.Error(apperrors.ErrAssertionFailed.Error())
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -412,15 +408,15 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 
 		if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
 			if accessToken, err = encryption.EncodeText(accessToken, r.Config.EncryptionKey); err != nil {
-				scope.Logger.Error("unable to encode access token", zap.Error(err))
-				return "unable to encode the access token",
+				scope.Logger.Error(apperrors.ErrEncryptAccToken.Error(), zap.Error(err))
+				return apperrors.ErrEncryptAccToken.Error(),
 					http.StatusInternalServerError,
 					err
 			}
 
 			if idToken, err = encryption.EncodeText(idToken, r.Config.EncryptionKey); err != nil {
-				scope.Logger.Error("unable to encode idToken token", zap.Error(err))
-				return "unable to encode idToken token",
+				scope.Logger.Error(apperrors.ErrEncryptIDToken.Error(), zap.Error(err))
+				return apperrors.ErrEncryptIDToken.Error(),
 					http.StatusInternalServerError,
 					err
 			}
@@ -431,8 +427,8 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 			refreshToken, err = encryption.EncodeText(token.RefreshToken, r.Config.EncryptionKey)
 
 			if err != nil {
-				scope.Logger.Error("failed to encrypt refresh token", zap.Error(err))
-				return "failed to encrypt refresh token",
+				scope.Logger.Error(apperrors.ErrEncryptRefreshToken.Error(), zap.Error(err))
+				return apperrors.ErrEncryptRefreshToken.Error(),
 					http.StatusInternalServerError,
 					err
 			}
@@ -511,7 +507,7 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 			if !assertOk {
 				return "",
 					http.StatusInternalServerError,
-					fmt.Errorf("assertion failed")
+					apperrors.ErrAssertionFailed
 			}
 		}
 
@@ -589,9 +585,7 @@ func (r *OauthProxy) logoutHandler(writer http.ResponseWriter, req *http.Request
 	scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
 
 	if !assertOk {
-		r.Log.Error(
-			"assertion failed",
-		)
+		r.Log.Error(apperrors.ErrAssertionFailed.Error())
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
