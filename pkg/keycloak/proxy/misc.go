@@ -389,7 +389,6 @@ func (r *OauthProxy) getRPT(
 		r.Config.Realm,
 		resourceParam,
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf(
 			"%s %s",
@@ -436,7 +435,6 @@ func (r *OauthProxy) getRPT(
 		r.Config.Realm,
 		permissions,
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf(
 			"%s resource: %s %w",
@@ -458,7 +456,6 @@ func (r *OauthProxy) getRPT(
 	}
 
 	rpt, err := r.IdpClient.GetRequestingPartyToken(ctx, userToken, r.Config.Realm, rptOptions)
-
 	if err != nil {
 		return nil, fmt.Errorf(
 			"%s resource: %s %w",
@@ -504,7 +501,6 @@ func (r *OauthProxy) getCodeFlowTokens(
 		codeVerifier,
 		r.Config.SkipOpenIDProviderTLSVerify,
 	)
-
 	if err != nil {
 		scope.Logger.Error("unable to exchange code for access token", zap.Error(err))
 		r.accessForbidden(writer, req)
@@ -512,7 +508,6 @@ func (r *OauthProxy) getCodeFlowTokens(
 	}
 
 	idToken, assertOk := resp.Extra("id_token").(string)
-
 	if !assertOk {
 		scope.Logger.Error("unable to obtain id token", zap.Error(err))
 		r.accessForbidden(writer, req)
@@ -575,17 +570,15 @@ func (r *OauthProxy) verifyOIDCTokens(
 	defer cancel()
 
 	idToken, err = verifier.Verify(ctx, rawIDToken)
-
 	if err != nil {
-		scope.Logger.Error("unable to verify the id token", zap.Error(err))
+		scope.Logger.Error(apperrors.ErrVerifyIDToken.Error(), zap.Error(err))
 		r.accessForbidden(writer, req)
 		return nil, nil, err
 	}
 
 	token, err := jwt.ParseSigned(rawIDToken)
-
 	if err != nil {
-		scope.Logger.Error("unable to parse id token", zap.Error(err))
+		scope.Logger.Error(apperrors.ErrParseIDToken.Error(), zap.Error(err))
 		r.accessForbidden(writer, req)
 		return nil, nil, err
 	}
@@ -594,9 +587,8 @@ func (r *OauthProxy) verifyOIDCTokens(
 	customClaims := &custClaims{}
 
 	err = token.UnsafeClaimsWithoutVerification(stdClaims, customClaims)
-
 	if err != nil {
-		scope.Logger.Error("unable to parse id token for claims", zap.Error(err))
+		scope.Logger.Error(apperrors.ErrParseIDTokenClaims.Error(), zap.Error(err))
 		r.accessForbidden(writer, req)
 		return nil, nil, err
 	}
@@ -608,18 +600,15 @@ func (r *OauthProxy) verifyOIDCTokens(
 		err = idToken.VerifyAccessToken(rawAccessToken)
 
 		if err != nil {
-			scope.Logger.Error("unable to verify access token", zap.Error(err))
+			scope.Logger.Error(apperrors.ErrVerifyAccessToken.Error(), zap.Error(err))
 			r.accessForbidden(writer, req)
 			return nil, nil, err
 		}
 	}
 
 	accToken, err := jwt.ParseSigned(rawAccessToken)
-
 	if err != nil {
-		scope.Logger.Error(
-			"unable to parse the access token, using id token only",
-		)
+		scope.Logger.Error(apperrors.ErrParseAccessToken.Error())
 		r.accessForbidden(writer, req)
 		return nil, nil, err
 	}
@@ -629,9 +618,8 @@ func (r *OauthProxy) verifyOIDCTokens(
 	customClaims = &custClaims{}
 
 	err = token.UnsafeClaimsWithoutVerification(stdClaims, customClaims)
-
 	if err != nil {
-		scope.Logger.Error("unable to parse access token for claims", zap.Error(err))
+		scope.Logger.Error(apperrors.ErrParseAccessTokenClaims.Error(), zap.Error(err))
 		r.accessForbidden(writer, req)
 		return nil, nil, err
 	}
@@ -663,18 +651,16 @@ func (r *OauthProxy) verifyRefreshToken(
 	req *http.Request,
 ) (*jwt.Claims, error) {
 	refreshToken, err := jwt.ParseSigned(rawRefreshToken)
-
 	if err != nil {
-		scope.Logger.Error("failed to parse refresh token", zap.Error(err))
+		scope.Logger.Error(apperrors.ErrParseRefreshToken.Error(), zap.Error(err))
 		writer.WriteHeader(http.StatusInternalServerError)
 		return nil, err
 	}
 
 	stdRefreshClaims := &jwt.Claims{}
 	err = refreshToken.UnsafeClaimsWithoutVerification(stdRefreshClaims)
-
 	if err != nil {
-		scope.Logger.Error("unable to parse refresh token for claims", zap.Error(err))
+		scope.Logger.Error(apperrors.ErrParseRefreshTokenClaims.Error(), zap.Error(err))
 		r.accessForbidden(writer, req)
 		return nil, err
 	}
@@ -709,7 +695,6 @@ func (r *OauthProxy) getRequestURIFromCookie(
 ) string {
 	// some clients URL-escape padding characters
 	unescapedValue, err := url.PathUnescape(encodedRequestURI.Value)
-
 	if err != nil {
 		scope.Logger.Warn(
 			"app did send a corrupted redirectURI in cookie: invalid url escaping",
@@ -721,7 +706,6 @@ func (r *OauthProxy) getRequestURIFromCookie(
 	// This is safe for browsers using atob() but needs to be treated with care for nodeJS clients,
 	// which natively use base64url encoding, and url-escape padding '=' characters.
 	decoded, err := base64.StdEncoding.DecodeString(unescapedValue)
-
 	if err != nil {
 		scope.Logger.Warn(
 			"app did send a corrupted redirectURI in cookie: invalid base64url encoding",

@@ -40,12 +40,36 @@ var (
 	ErrSessionExpiredRefreshOff = errors.New("session expired and access token refreshing is disabled")
 	ErrRefreshTokenNotFound     = errors.New("unable to find refresh token for user")
 	ErrAccTokenRefreshFailure   = errors.New("failed to refresh the access token")
-	ErrEncryptAccToken          = errors.New("unable to encode access token")
+	ErrEncryptAccToken          = errors.New("unable to encrypt access token")
 	ErrEncryptRefreshToken      = errors.New("failed to encrypt refresh token")
-	ErrEncryptIDToken           = errors.New("unable to encode idToken token")
+	ErrEncryptIDToken           = errors.New("unable to encrypt idToken token")
 
 	ErrDelTokFromStore = errors.New("failed to remove old token")
 	ErrSaveTokToStore  = errors.New("failed to store refresh token")
+
+	ErrLoginWithLoginHandleDisabled   = errors.New("attempt to login when login handler is disabled")
+	ErrMissingLoginCreds              = errors.New("request does not have both username and password")
+	ErrInvalidUserCreds               = errors.New("invalid user credentials")
+	ErrAcquireTokenViaPassCredsGrant  = errors.New("unable to request the access token via grant_type 'password'")
+	ErrExtractIdentityFromAccessToken = errors.New("unable to extract identity from access token")
+	ErrResponseMissingIDToken         = errors.New("token response does not contain an id_token")
+	ErrResponseMissingExpires         = errors.New("token response does not contain expires_in")
+	ErrParseRefreshToken              = errors.New("failed to parse refresh token")
+	ErrParseIDToken                   = errors.New("failed to parse id token")
+	ErrParseAccessToken               = errors.New("failed to parse access token")
+	ErrParseIDTokenClaims             = errors.New("faled to parse id token claims")
+	ErrParseAccessTokenClaims         = errors.New("faled to parse access token claims")
+	ErrParseRefreshTokenClaims        = errors.New("faled to parse refresh token claims")
+
+	ErrVerifyIDToken     = errors.New("unable to verify the ID token")
+	ErrVerifyAccessToken = errors.New("unable to verify the access token")
+
+	ErrCreateRevocationReq   = errors.New("unable to construct the revocation request")
+	ErrRevocationReqFailure  = errors.New("request to revocation endpoint failed")
+	ErrInvalidRevocationResp = errors.New("invalid response from revocation endpoint")
+
+	ErrMarshallDiscoveryResp  = errors.New("problem marshalling discovery response")
+	ErrDiscoveryResponseWrite = errors.New("problem during discovery response write")
 
 	// config errors
 

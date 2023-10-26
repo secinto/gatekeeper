@@ -511,7 +511,7 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 			case apperrors.ErrNoAuthzFound:
 			default:
 				if err != nil {
-					scope.Logger.Error("Undexpected error during authorization", zap.Error(err))
+					scope.Logger.Error(apperrors.ErrFailedAuthzRequest.Error(), zap.Error(err))
 					//nolint:contextcheck
 					next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
 					return
@@ -550,7 +550,6 @@ func (r *OauthProxy) checkClaim(user *UserContext, claimName string, match *rege
 	switch user.Claims[claimName].(type) {
 	case []interface{}:
 		claims, assertOk := user.Claims[claimName].([]interface{})
-
 		if !assertOk {
 			r.Log.Error(apperrors.ErrAssertionFailed.Error())
 			return false
@@ -558,7 +557,6 @@ func (r *OauthProxy) checkClaim(user *UserContext, claimName string, match *rege
 
 		for _, v := range claims {
 			value, ok := v.(string)
-
 			if !ok {
 				r.Log.Warn(
 					"Problem while asserting claim",
@@ -595,12 +593,10 @@ func (r *OauthProxy) checkClaim(user *UserContext, claimName string, match *rege
 		return false
 	case string:
 		claims, assertOk := user.Claims[claimName].(string)
-
 		if !assertOk {
 			r.Log.Error(apperrors.ErrAssertionFailed.Error())
 			return false
 		}
-
 		if match.MatchString(claims) {
 			return true
 		}
@@ -630,7 +626,6 @@ func (r *OauthProxy) checkClaim(user *UserContext, claimName string, match *rege
 //nolint:cyclop
 func (r *OauthProxy) admissionMiddleware(resource *authorization.Resource) func(http.Handler) http.Handler {
 	claimMatches := make(map[string]*regexp.Regexp)
-
 	for k, v := range r.Config.MatchClaims {
 		claimMatches[k] = regexp.MustCompile(v)
 	}
@@ -639,27 +634,26 @@ func (r *OauthProxy) admissionMiddleware(resource *authorization.Resource) func(
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			// we don't need to continue is a decision has been made
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
-
 			if !assertOk {
 				r.Log.Error(apperrors.ErrAssertionFailed.Error())
 				return
 			}
-
 			if scope.AccessDenied {
 				next.ServeHTTP(wrt, req)
 				return
 			}
 
 			user := scope.Identity
+			lLog := scope.Logger.With(
+				zap.String("access", "denied"),
+				zap.String("email", user.Email),
+				zap.String("resource", resource.URL),
+			)
 
 			// @step: we need to check the roles
 			if !utils.HasAccess(resource.Roles, user.Roles, !resource.RequireAnyRole) {
-				scope.Logger.Warn("access denied, invalid roles",
-					zap.String("access", "denied"),
-					zap.String("email", user.Email),
-					zap.String("resource", resource.URL),
+				lLog.Warn("access denied, invalid roles",
 					zap.String("roles", resource.GetRoles()))
-
 				//nolint:contextcheck
 				next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
 				return
@@ -673,12 +667,8 @@ func (r *OauthProxy) admissionMiddleware(resource *authorization.Resource) func(
 					name := resVals[0]
 					canonName := http.CanonicalHeaderKey(name)
 					values, ok := req.Header[canonName]
-
 					if !ok {
-						scope.Logger.Warn("access denied, invalid headers",
-							zap.String("access", "denied"),
-							zap.String("email", user.Email),
-							zap.String("resource", resource.URL),
+						lLog.Warn("access denied, invalid headers",
 							zap.String("headers", resource.GetHeaders()))
 
 						//nolint:contextcheck
@@ -698,10 +688,7 @@ func (r *OauthProxy) admissionMiddleware(resource *authorization.Resource) func(
 
 				// @step: we need to check the headers
 				if !utils.HasAccess(resource.Headers, reqHeaders, true) {
-					scope.Logger.Warn("access denied, invalid headers",
-						zap.String("access", "denied"),
-						zap.String("email", user.Email),
-						zap.String("resource", resource.URL),
+					lLog.Warn("access denied, invalid headers",
 						zap.String("headers", resource.GetHeaders()))
 
 					//nolint:contextcheck
@@ -712,12 +699,8 @@ func (r *OauthProxy) admissionMiddleware(resource *authorization.Resource) func(
 
 			// @step: check if we have any groups, the groups are there
 			if !utils.HasAccess(resource.Groups, user.Groups, false) {
-				scope.Logger.Warn("access denied, invalid groups",
-					zap.String("access", "denied"),
-					zap.String("email", user.Email),
-					zap.String("resource", resource.URL),
+				lLog.Warn("access denied, invalid groups",
 					zap.String("groups", strings.Join(resource.Groups, ",")))
-
 				//nolint:contextcheck
 				next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
 				return
