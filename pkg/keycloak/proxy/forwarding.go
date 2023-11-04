@@ -127,5 +127,13 @@ func (r *OauthProxy) forwardProxyHandler() func(*http.Request, *http.Response) {
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			req.Header.Set("X-Forwarded-Agent", constant.Prog)
 		}
+
+		if r.Config.EnableHmac {
+			reqHmac, err := utils.GenerateHmac(req, r.Config.EncryptionKey)
+			if err != nil {
+				r.Log.Error(err.Error())
+			}
+			req.Header.Set(constant.HeaderXHMAC, reqHmac)
+		}
 	}
 }

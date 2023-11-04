@@ -2335,3 +2335,45 @@ func TestIsPostLoginRedirectValid(t *testing.T) {
 		)
 	}
 }
+
+func TestIsEnableHmacValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "ValidEnableHmac",
+			Config: &Config{
+				EncryptionKey: "sdkljfalisujeoir",
+				EnableHmac:    true,
+			},
+			Valid: true,
+		},
+		{
+			Name: "MissinEncryptionKey",
+			Config: &Config{
+				EncryptionKey: "",
+				EnableHmac:    true,
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isEnableHmacValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}

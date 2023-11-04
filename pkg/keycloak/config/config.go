@@ -241,6 +241,8 @@ type Config struct {
 	StoreURL string `env:"STORE_URL" json:"store-url" usage:"url for the storage subsystem, e.g redis://user:secret@localhost:6379/0?protocol=3, only supported is redis usig redis uri spec" yaml:"store-url"`
 	// EncryptionKey is the encryption key used to encrypt the refresh token
 	EncryptionKey string `env:"ENCRYPTION_KEY" json:"encryption-key" usage:"encryption key used to encryption the session state" yaml:"encryption-key"`
+	// EnableHmac enables creating hmac for forwarded requests and verifications for incoming requests
+	EnableHmac bool `env:"Enable_HMAC" json:"enable-hmac" usage:"enable creating hmac for forwarded requests and verification on incoming requests"`
 
 	// NoProxy it passed through all middleware but not proxy to upstream, useful when using as auth backend for forward-auth (nginx, traefik)
 	NoProxy bool `env:"NO_PROXY" json:"no-proxy" usage:"do not proxy requests to upstream, useful for forward-auth usage (with nginx, traefik)" yaml:"no-proxy"`
@@ -638,6 +640,7 @@ func (r *Config) isForwardingProxySettingsValid() error {
 			r.isClientIDValid,
 			r.isDiscoveryURLValid,
 			r.isForwardingGrantValid,
+			r.isEnableHmacValid,
 			func() error {
 				if r.TLSCertificate != "" {
 					return apperrors.ErrInvalidForwardTLSCertOpt
@@ -674,6 +677,7 @@ func (r *Config) isReverseProxySettingsValid() error {
 			r.isMatchClaimValid,
 			r.isPKCEValid,
 			r.isPostLoginRedirectValid,
+			r.isEnableHmacValid,
 		}
 
 		for _, validationFunc := range validationRegistry {
@@ -974,6 +978,13 @@ func (r *Config) isPostLoginRedirectValid() error {
 		if parsedURI.Host != "" || parsedURI.Scheme != "" {
 			return apperrors.ErrInvalidPostLoginRedirectPath
 		}
+	}
+	return nil
+}
+
+func (r *Config) isEnableHmacValid() error {
+	if r.EnableHmac && r.EncryptionKey == "" {
+		return apperrors.ErrHmacRequiresEncKey
 	}
 	return nil
 }

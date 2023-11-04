@@ -243,6 +243,10 @@ func (r *OauthProxy) CreateReverseProxy() error {
 	engine := chi.NewRouter()
 	r.useDefaultStack(engine)
 
+	if r.Config.EnableHmac {
+		engine.Use(hmacMiddleware(r.Log, r.Config.EncryptionKey))
+	}
+
 	// @step: configure CORS middleware
 	if len(r.Config.CorsOrigins) > 0 {
 		corsHandler := cors.New(cors.Options{

@@ -45,6 +45,7 @@ const (
 	ContextScopeName
 	HeaderXForwardedFor = "X-Forwarded-For"
 	HeaderXRealIP       = "X-Real-IP"
+	HeaderXHMAC         = "X-HMAC-SHA256"
 
 	DurationType = "time.Duration"
 

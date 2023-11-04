@@ -71,6 +71,9 @@ var (
 	ErrMarshallDiscoveryResp  = errors.New("problem marshalling discovery response")
 	ErrDiscoveryResponseWrite = errors.New("problem during discovery response write")
 
+	ErrHmacHeaderEmpty = errors.New("request HMAC header empty")
+	ErrHmacMismatch    = errors.New("received HMAC header and calculated HMAC does not match")
+
 	// config errors
 
 	ErrInvalidPostLoginRedirectPath            = errors.New("post login redirect path invalid, should be only path not absolute url (no hostname, scheme)")
@@ -137,4 +140,5 @@ var (
 	ErrTooManyDefaultDenyOpts    = errors.New(
 		"only one of enable-default-deny/enable-default-deny-strict can be true",
 	)
+	ErrHmacRequiresEncKey = errors.New("enable-hmac requires encryption key")
 )

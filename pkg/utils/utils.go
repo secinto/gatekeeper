@@ -17,10 +17,13 @@ package utils
 
 import (
 	"bytes"
+	"crypto/hmac"
 	cryptorand "crypto/rand"
+	"crypto/sha256"
 	sha "crypto/sha512"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -432,4 +435,28 @@ func GetTokenInCookie(req *http.Request, name string) (string, error) {
 	}
 
 	return token.String(), nil
+}
+
+func GenerateHmac(req *http.Request, encKey string) (string, error) {
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return "", err
+	}
+
+	stringToSign := fmt.Sprintf(
+		"%s\n%s%s\n%s;%s;%s",
+		req.Method,
+		req.URL.Path,
+		req.URL.RawQuery,
+		req.Header.Get(constant.AuthorizationHeader),
+		req.Host,
+		sha256.Sum256(body),
+	)
+
+	mac := hmac.New(sha256.New, []byte(encKey))
+	mac.Write([]byte(stringToSign))
+	reqHmac := mac.Sum(nil)
+	hexHmac := hex.EncodeToString(reqHmac)
+
+	return hexHmac, nil
 }

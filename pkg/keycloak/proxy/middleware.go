@@ -894,3 +894,41 @@ func (r *OauthProxy) denyMiddleware(_ http.Handler) http.Handler {
 		r.accessForbidden(wrt, req)
 	})
 }
+
+// hmacMiddleware verifies hmac
+func hmacMiddleware(logger *zap.Logger, encKey string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+			if !assertOk {
+				logger.Error(apperrors.ErrAssertionFailed.Error())
+				return
+			}
+
+			if scope.AccessDenied {
+				next.ServeHTTP(wrt, req)
+				return
+			}
+
+			expectedMAC := req.Header.Get(constant.HeaderXHMAC)
+			if expectedMAC == "" {
+				logger.Debug(apperrors.ErrHmacHeaderEmpty.Error())
+				wrt.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			reqHmac, err := utils.GenerateHmac(req, encKey)
+			if err != nil {
+				logger.Error(err.Error())
+			}
+
+			if reqHmac != expectedMAC {
+				logger.Debug(apperrors.ErrHmacMismatch.Error())
+				wrt.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			next.ServeHTTP(wrt, req)
+		})
+	}
+}

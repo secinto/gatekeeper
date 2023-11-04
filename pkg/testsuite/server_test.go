@@ -509,6 +509,107 @@ func TestSkipOpenIDProviderTLSVerifyForwardingProxy(t *testing.T) {
 	proxy.RunTests(t, requests)
 }
 
+func TestEnableHmacForwardingProxy(t *testing.T) {
+	fakeUpstream := httptest.NewServer(&FakeUpstreamService{})
+	encKey := "sdkljfalisujeoir"
+	upstreamConfig := newFakeKeycloakConfig()
+	upstreamConfig.EnableHmac = true
+	upstreamConfig.EncryptionKey = encKey
+	upstreamConfig.NoRedirects = true
+	upstreamConfig.EnableDefaultDeny = true
+	upstreamConfig.ClientID = ValidUsername
+	upstreamConfig.ClientSecret = ValidPassword
+	upstreamConfig.PatRetryCount = 5
+	upstreamConfig.PatRetryInterval = 2 * time.Second
+	upstreamConfig.Upstream = fakeUpstream.URL
+	// in newFakeProxy we are creating fakeauth server so, we will
+	// have two different fakeauth servers for upstream and forwarding,
+	// so we need to skip issuer check, but responses will be same
+	// so it is ok for this testing
+	upstreamConfig.SkipAccessTokenIssuerCheck = true
+
+	upstreamProxy := newFakeProxy(
+		upstreamConfig,
+		&fakeAuthConfig{},
+	)
+
+	testCases := []struct {
+		Name              string
+		ProxySettings     func(conf *config.Config)
+		ExecutionSettings []fakeRequest
+	}{
+		{
+			Name: "TestWithEnableHmacOnBothSides",
+			ProxySettings: func(conf *config.Config) {
+				conf.EnableForwarding = true
+				conf.EnableHmac = true
+				conf.EncryptionKey = encKey
+				conf.ForwardingDomains = []string{}
+				conf.ForwardingUsername = ValidUsername
+				conf.ForwardingPassword = ValidPassword
+				conf.ForwardingGrantType = configcore.GrantTypeUserCreds
+				conf.PatRetryCount = 5
+				conf.PatRetryInterval = 2 * time.Second
+				conf.OpenIDProviderTimeout = 30 * time.Second
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URL:                     upstreamProxy.getServiceURL() + "/test",
+					ProxyRequest:            true,
+					ExpectedProxy:           true,
+					ExpectedCode:            http.StatusOK,
+					ExpectedContentContains: "gambol",
+				},
+			},
+		},
+		{
+			Name: "TestWithDisabledHmacOnForward",
+			ProxySettings: func(conf *config.Config) {
+				conf.EnableForwarding = true
+				conf.EnableHmac = false
+				conf.EncryptionKey = encKey
+				conf.ForwardingDomains = []string{}
+				conf.ForwardingUsername = ValidUsername
+				conf.ForwardingPassword = ValidPassword
+				conf.ForwardingGrantType = configcore.GrantTypeUserCreds
+				conf.PatRetryCount = 5
+				conf.PatRetryInterval = 2 * time.Second
+				conf.OpenIDProviderTimeout = 30 * time.Second
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URL:           upstreamProxy.getServiceURL() + "/test",
+					ProxyRequest:  true,
+					ExpectedProxy: false,
+					ExpectedCode:  http.StatusBadRequest,
+					ExpectedContent: func(body string, testNum int) {
+						assert.Equal(t, "", body)
+					},
+				},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				forwardingConfig := newFakeKeycloakConfig()
+				forwardingConfig.Upstream = upstreamProxy.getServiceURL()
+
+				testCase.ProxySettings(forwardingConfig)
+				forwardingProxy := newFakeProxy(
+					forwardingConfig,
+					&fakeAuthConfig{},
+				)
+
+				forwardingProxy.RunTests(t, testCase.ExecutionSettings)
+			},
+		)
+	}
+}
+
 func TestForbiddenTemplate(t *testing.T) {
 	cfg := newFakeKeycloakConfig()
 	cfg.ForbiddenPage = "../../templates/forbidden.html.tmpl"
