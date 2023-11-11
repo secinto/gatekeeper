@@ -1,8 +1,8 @@
 package proxy
 
 import (
+	"context"
 	"fmt"
-	"html/template"
 	"net"
 	"net/http"
 	"net/url"
@@ -37,21 +37,24 @@ type reverseProxy interface {
 }
 
 type OauthProxy struct {
-	Provider       *oidc3.Provider
-	Config         *config.Config
-	Endpoint       *url.URL
-	IdpClient      *gocloak.GoCloak
-	Listener       net.Listener
-	Log            *zap.Logger
-	metricsHandler http.Handler
-	Router         http.Handler
-	adminRouter    http.Handler
-	Server         *http.Server
-	Store          storage.Storage
-	templates      *template.Template
-	Upstream       reverseProxy
-	pat            *PAT
-	rpt            *RPT
+	Provider         *oidc3.Provider
+	Config           *config.Config
+	Endpoint         *url.URL
+	IdpClient        *gocloak.GoCloak
+	Listener         net.Listener
+	Log              *zap.Logger
+	metricsHandler   http.Handler
+	Router           http.Handler
+	adminRouter      http.Handler
+	Server           *http.Server
+	Store            storage.Storage
+	Upstream         reverseProxy
+	pat              *PAT
+	rpt              *RPT
+	accessForbidden  func(wrt http.ResponseWriter, req *http.Request) context.Context
+	accessError      func(wrt http.ResponseWriter, req *http.Request) context.Context
+	customSignInPage func(wrt http.ResponseWriter, authURL string)
+	GetIdentity      func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error)
 }
 
 // TokenResponse

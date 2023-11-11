@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/url"
 	"os"
@@ -65,8 +66,8 @@ func filterCookies(req *http.Request, filter []string) error {
 	return nil
 }
 
-// revokeProxy is responsible to stopping the middleware from proxying the request
-func (r *OauthProxy) revokeProxy(req *http.Request) context.Context {
+// revokeProxy is responsible for stopping middleware from proxying the request
+func revokeProxy(logger *zap.Logger, req *http.Request) context.Context {
 	var scope *RequestScope
 	ctxVal := req.Context().Value(constant.ContextScopeName)
 
@@ -76,9 +77,8 @@ func (r *OauthProxy) revokeProxy(req *http.Request) context.Context {
 	default:
 		var assertOk bool
 		scope, assertOk = ctxVal.(*RequestScope)
-
 		if !assertOk {
-			r.Log.Error(apperrors.ErrAssertionFailed.Error())
+			logger.Error(apperrors.ErrAssertionFailed.Error())
 			scope = &RequestScope{AccessDenied: true}
 		}
 	}
@@ -89,59 +89,78 @@ func (r *OauthProxy) revokeProxy(req *http.Request) context.Context {
 }
 
 // accessForbidden redirects the user to the forbidden page
-func (r *OauthProxy) accessForbidden(wrt http.ResponseWriter, req *http.Request) context.Context {
-	wrt.WriteHeader(http.StatusForbidden)
-	// are we using a custom http template for 403?
-	if r.Config.HasCustomForbiddenPage() {
-		name := path.Base(r.Config.ForbiddenPage)
+func accessForbidden(
+	logger *zap.Logger,
+	httpStatus int,
+	page string,
+	tags map[string]string,
+	tmpl *template.Template,
+) func(wrt http.ResponseWriter, req *http.Request) context.Context {
+	return func(wrt http.ResponseWriter, req *http.Request) context.Context {
+		wrt.WriteHeader(httpStatus)
+		// are we using a custom http template for 403?
+		if page != "" {
+			name := path.Base(page)
 
-		if err := r.Render(wrt, name, r.Config.Tags); err != nil {
-			r.Log.Error(
-				"failed to render the template",
-				zap.Error(err),
-				zap.String("template", name),
-			)
+			if err := tmpl.ExecuteTemplate(wrt, name, tags); err != nil {
+				logger.Error(
+					"failed to render the template",
+					zap.Error(err),
+					zap.String("template", name),
+				)
+			}
 		}
-	}
 
-	return r.revokeProxy(req)
+		return revokeProxy(logger, req)
+	}
 }
 
-// accessError redirects the user to the error page
-func (r *OauthProxy) accessError(wrt http.ResponseWriter, req *http.Request) context.Context {
-	wrt.WriteHeader(http.StatusBadRequest)
-	// are we using a custom http template for 400?
-	if r.Config.HasCustomErrorPage() {
-		name := path.Base(r.Config.ErrorPage)
+// renders customSignInPage
+func customSignInPage(
+	logger *zap.Logger,
+	page string,
+	tags map[string]string,
+	tmpl *template.Template,
+) func(wrt http.ResponseWriter, authURL string) {
+	return func(wrt http.ResponseWriter, authURL string) {
+		wrt.WriteHeader(http.StatusOK)
+		name := path.Base(page)
+		model := make(map[string]string)
+		model["redirect"] = authURL
+		mTags := utils.MergeMaps(model, tags)
 
-		if err := r.Render(wrt, name, r.Config.Tags); err != nil {
-			r.Log.Error(
+		if err := tmpl.ExecuteTemplate(wrt, name, mTags); err != nil {
+			logger.Error(
 				"failed to render the template",
 				zap.Error(err),
 				zap.String("template", name),
 			)
 		}
 	}
-
-	return r.revokeProxy(req)
 }
 
 // redirectToURL redirects the user and aborts the context
-func (r *OauthProxy) redirectToURL(url string, wrt http.ResponseWriter, req *http.Request, statusCode int) context.Context {
+func (r *OauthProxy) redirectToURL(
+	logger *zap.Logger,
+	url string,
+	wrt http.ResponseWriter,
+	req *http.Request,
+	statusCode int,
+) context.Context {
 	wrt.Header().Add(
 		"Cache-Control",
 		"no-cache, no-store, must-revalidate, max-age=0",
 	)
 
 	http.Redirect(wrt, req, url, statusCode)
-	return r.revokeProxy(req)
+	return revokeProxy(logger, req)
 }
 
 // redirectToAuthorization redirects the user to authorization handler
 func (r *OauthProxy) redirectToAuthorization(wrt http.ResponseWriter, req *http.Request) context.Context {
 	if r.Config.NoRedirects {
 		wrt.WriteHeader(http.StatusUnauthorized)
-		return r.revokeProxy(req)
+		return revokeProxy(r.Log, req)
 	}
 
 	// step: add a state referrer to the authorization page
@@ -156,7 +175,7 @@ func (r *OauthProxy) redirectToAuthorization(wrt http.ResponseWriter, req *http.
 		)
 
 		wrt.WriteHeader(http.StatusForbidden)
-		return r.revokeProxy(req)
+		return revokeProxy(r.Log, req)
 	}
 
 	url := r.Config.WithOAuthURI(constant.AuthorizationURL + authQuery)
@@ -169,7 +188,7 @@ func (r *OauthProxy) redirectToAuthorization(wrt http.ResponseWriter, req *http.
 			r.Log.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
 
 			wrt.WriteHeader(http.StatusForbidden)
-			return r.revokeProxy(req)
+			return revokeProxy(r.Log, req)
 		}
 
 		url = fmt.Sprintf(
@@ -183,13 +202,14 @@ func (r *OauthProxy) redirectToAuthorization(wrt http.ResponseWriter, req *http.
 	r.Log.Debug("redirecting to url", zap.String("url", url))
 
 	r.redirectToURL(
+		r.Log,
 		url,
 		wrt,
 		req,
 		http.StatusSeeOther,
 	)
 
-	return r.revokeProxy(req)
+	return revokeProxy(r.Log, req)
 }
 
 // GetAccessCookieExpiration calculates the expiration of the access token cookie

@@ -99,7 +99,7 @@ func newFakeProxy(cfg *config.Config, authConfig *fakeAuthConfig) *fakeProxy {
 		panic("failed to create fake proxy service, error: " + err.Error())
 	}
 
-	proxy, err := proxy.NewProxy(cfg)
+	proxy, err := proxy.NewProxy(cfg, nil)
 
 	if err != nil {
 		panic("failed to create fake proxy service, error: " + err.Error())
@@ -602,7 +602,7 @@ func newTestProxyService(config *config.Config) (*proxy.OauthProxy, *fakeAuthSer
 		panic("failed to create proxy service, error: " + err.Error())
 	}
 
-	proxy, err := proxy.NewProxy(config)
+	proxy, err := proxy.NewProxy(config, nil)
 	if err != nil {
 		panic("failed to create proxy service, error: " + err.Error())
 	}

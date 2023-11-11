@@ -27,6 +27,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"golang.org/x/oauth2"
 
@@ -45,52 +46,52 @@ const (
 )
 
 // entrypointMiddleware is custom filtering for incoming requests
-func (r *OauthProxy) entrypointMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
-		// @step: create a context for the request
-		scope := &RequestScope{}
-		// Save the exact formatting of the incoming request so we can use it later
-		scope.Path = req.URL.Path
-		scope.RawPath = req.URL.RawPath
-		scope.Logger = r.Log
+func entrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			// @step: create a context for the request
+			scope := &RequestScope{}
+			// Save the exact formatting of the incoming request so we can use it later
+			scope.Path = req.URL.Path
+			scope.RawPath = req.URL.RawPath
+			scope.Logger = logger
 
-		// We want to Normalize the URL so that we can more easily and accurately
-		// parse it to apply resource protection rules.
-		purell.NormalizeURL(req.URL, normalizeFlags)
+			// We want to Normalize the URL so that we can more easily and accurately
+			// parse it to apply resource protection rules.
+			purell.NormalizeURL(req.URL, normalizeFlags)
 
-		// ensure we have a slash in the url
-		if !strings.HasPrefix(req.URL.Path, "/") {
-			req.URL.Path = "/" + req.URL.Path
-		}
-		req.URL.RawPath = req.URL.EscapedPath()
+			// ensure we have a slash in the url
+			if !strings.HasPrefix(req.URL.Path, "/") {
+				req.URL.Path = "/" + req.URL.Path
+			}
+			req.URL.RawPath = req.URL.EscapedPath()
 
-		resp := middleware.NewWrapResponseWriter(wrt, 1)
-		start := time.Now()
-		// All the processing, including forwarding the request upstream and getting the response,
-		// happens here in this chain.
-		next.ServeHTTP(resp, req.WithContext(context.WithValue(req.Context(), constant.ContextScopeName, scope)))
+			resp := middleware.NewWrapResponseWriter(wrt, 1)
+			start := time.Now()
+			// All the processing, including forwarding the request upstream and getting the response,
+			// happens here in this chain.
+			next.ServeHTTP(resp, req.WithContext(context.WithValue(req.Context(), constant.ContextScopeName, scope)))
 
-		// @metric record the time taken then response code
-		latencyMetric.Observe(time.Since(start).Seconds())
-		statusMetric.WithLabelValues(fmt.Sprintf("%d", resp.Status()), req.Method).Inc()
+			// @metric record the time taken then response code
+			metrics.LatencyMetric.Observe(time.Since(start).Seconds())
+			metrics.StatusMetric.WithLabelValues(fmt.Sprintf("%d", resp.Status()), req.Method).Inc()
 
-		// place back the original uri for any later consumers
-		req.URL.Path = scope.Path
-		req.URL.RawPath = scope.RawPath
-	})
+			// place back the original uri for any later consumers
+			req.URL.Path = scope.Path
+			req.URL.RawPath = scope.RawPath
+		})
+	}
 }
 
 // requestIDMiddleware is responsible for adding a request id if none found
-func (r *OauthProxy) requestIDMiddleware(header string) func(http.Handler) http.Handler {
+func requestIDMiddleware(header string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			if v := req.Header.Get(header); v == "" {
 				uuid, err := uuid.NewV1()
-
 				if err != nil {
 					wrt.WriteHeader(http.StatusInternalServerError)
 				}
-
 				req.Header.Set(header, uuid.String())
 			}
 
@@ -100,57 +101,60 @@ func (r *OauthProxy) requestIDMiddleware(header string) func(http.Handler) http.
 }
 
 // loggingMiddleware is a custom http logger
-func (r *OauthProxy) loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		start := time.Now()
-		resp, assertOk := w.(middleware.WrapResponseWriter)
+func loggingMiddleware(
+	logger *zap.Logger,
+	verbose bool,
+) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			start := time.Now()
+			resp, assertOk := w.(middleware.WrapResponseWriter)
+			if !assertOk {
+				logger.Error(apperrors.ErrAssertionFailed.Error())
+				return
+			}
 
-		if !assertOk {
-			r.Log.Error(apperrors.ErrAssertionFailed.Error())
-			return
-		}
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+			if !assertOk {
+				logger.Error(apperrors.ErrAssertionFailed.Error())
+				return
+			}
 
-		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+			if verbose {
+				requestLogger := logger.With(
+					zap.Any("headers", req.Header),
+					zap.String("path", req.URL.Path),
+					zap.String("method", req.Method),
+				)
+				scope.Logger = requestLogger
+			}
 
-		if !assertOk {
-			r.Log.Error(apperrors.ErrAssertionFailed.Error())
-			return
-		}
+			next.ServeHTTP(resp, req)
 
-		if r.Config.Verbose {
-			requestLogger := r.Log.With(
-				zap.Any("headers", req.Header),
-				zap.String("path", req.URL.Path),
-				zap.String("method", req.Method),
-			)
-			scope.Logger = requestLogger
-		}
+			addr := utils.RealIP(req)
 
-		next.ServeHTTP(resp, req)
-
-		addr := utils.RealIP(req)
-
-		if req.URL.Path == req.URL.RawPath || req.URL.RawPath == "" {
-			scope.Logger.Info("client request",
-				zap.Duration("latency", time.Since(start)),
-				zap.Int("status", resp.Status()),
-				zap.Int("bytes", resp.BytesWritten()),
-				zap.String("client_ip", addr),
-				zap.String("remote_addr", req.RemoteAddr),
-				zap.String("method", req.Method),
-				zap.String("path", req.URL.Path))
-		} else {
-			scope.Logger.Info("client request",
-				zap.Duration("latency", time.Since(start)),
-				zap.Int("status", resp.Status()),
-				zap.Int("bytes", resp.BytesWritten()),
-				zap.String("client_ip", addr),
-				zap.String("remote_addr", req.RemoteAddr),
-				zap.String("method", req.Method),
-				zap.String("path", req.URL.Path),
-				zap.String("raw path", req.URL.RawPath))
-		}
-	})
+			if req.URL.Path == req.URL.RawPath || req.URL.RawPath == "" {
+				scope.Logger.Info("client request",
+					zap.Duration("latency", time.Since(start)),
+					zap.Int("status", resp.Status()),
+					zap.Int("bytes", resp.BytesWritten()),
+					zap.String("client_ip", addr),
+					zap.String("remote_addr", req.RemoteAddr),
+					zap.String("method", req.Method),
+					zap.String("path", req.URL.Path))
+			} else {
+				scope.Logger.Info("client request",
+					zap.Duration("latency", time.Since(start)),
+					zap.Int("status", resp.Status()),
+					zap.Int("bytes", resp.BytesWritten()),
+					zap.String("client_ip", addr),
+					zap.String("remote_addr", req.RemoteAddr),
+					zap.String("method", req.Method),
+					zap.String("path", req.URL.Path),
+					zap.String("raw path", req.URL.RawPath))
+			}
+		})
+	}
 }
 
 /*
@@ -534,7 +538,13 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 // checkClaim checks whether claim in userContext matches claimName, match. It can be String or Strings claim.
 //
 //nolint:cyclop
-func (r *OauthProxy) checkClaim(user *UserContext, claimName string, match *regexp.Regexp, resourceURL string) bool {
+func checkClaim(
+	logger *zap.Logger,
+	user *UserContext,
+	claimName string,
+	match *regexp.Regexp,
+	resourceURL string,
+) bool {
 	errFields := []zapcore.Field{
 		zap.String("claim", claimName),
 		zap.String("access", "denied"),
@@ -542,8 +552,9 @@ func (r *OauthProxy) checkClaim(user *UserContext, claimName string, match *rege
 		zap.String("resource", resourceURL),
 	}
 
+	lLog := logger.With(errFields...)
 	if _, found := user.Claims[claimName]; !found {
-		r.Log.Warn("the token does not have the claim", errFields...)
+		lLog.Warn("the token does not have the claim")
 		return false
 	}
 
@@ -551,23 +562,20 @@ func (r *OauthProxy) checkClaim(user *UserContext, claimName string, match *rege
 	case []interface{}:
 		claims, assertOk := user.Claims[claimName].([]interface{})
 		if !assertOk {
-			r.Log.Error(apperrors.ErrAssertionFailed.Error())
+			logger.Error(apperrors.ErrAssertionFailed.Error())
 			return false
 		}
 
 		for _, v := range claims {
 			value, ok := v.(string)
 			if !ok {
-				r.Log.Warn(
+				lLog.Warn(
 					"Problem while asserting claim",
-					append(
-						errFields,
-						zap.String(
-							"issued",
-							fmt.Sprintf("%v", user.Claims[claimName]),
-						),
-						zap.String("required", match.String()),
-					)...,
+					zap.String(
+						"issued",
+						fmt.Sprintf("%v", user.Claims[claimName]),
+					),
+					zap.String("required", match.String()),
 				)
 
 				return false
@@ -578,55 +586,51 @@ func (r *OauthProxy) checkClaim(user *UserContext, claimName string, match *rege
 			}
 		}
 
-		r.Log.Warn(
+		lLog.Warn(
 			"claim requirement does not match any element claim group in token",
-			append(
-				errFields,
-				zap.String(
-					"issued",
-					fmt.Sprintf("%v", user.Claims[claimName]),
-				),
-				zap.String("required", match.String()),
-			)...,
+			zap.String("issued", fmt.Sprintf("%v", user.Claims[claimName])),
+			zap.String("required", match.String()),
 		)
 
 		return false
 	case string:
 		claims, assertOk := user.Claims[claimName].(string)
 		if !assertOk {
-			r.Log.Error(apperrors.ErrAssertionFailed.Error())
+			logger.Error(apperrors.ErrAssertionFailed.Error())
 			return false
 		}
 		if match.MatchString(claims) {
 			return true
 		}
 
-		r.Log.Warn(
+		lLog.Warn(
 			"claim requirement does not match claim in token",
-			append(
-				errFields,
-				zap.String("issued", claims),
-				zap.String("required", match.String()),
-			)...,
+			zap.String("issued", claims),
+			zap.String("required", match.String()),
 		)
 
 		return false
 	default:
-		r.Log.Error(
+		logger.Error(
 			"unable to extract the claim from token not string or array of strings",
 		)
 	}
 
-	r.Log.Warn("unexpected error", errFields...)
+	lLog.Warn("unexpected error")
 	return false
 }
 
 // admissionMiddleware is responsible for checking the access token against the protected resource
 //
 //nolint:cyclop
-func (r *OauthProxy) admissionMiddleware(resource *authorization.Resource) func(http.Handler) http.Handler {
+func admissionMiddleware(
+	logger *zap.Logger,
+	resource *authorization.Resource,
+	matchClaims map[string]string,
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+) func(http.Handler) http.Handler {
 	claimMatches := make(map[string]*regexp.Regexp)
-	for k, v := range r.Config.MatchClaims {
+	for k, v := range matchClaims {
 		claimMatches[k] = regexp.MustCompile(v)
 	}
 
@@ -635,7 +639,7 @@ func (r *OauthProxy) admissionMiddleware(resource *authorization.Resource) func(
 			// we don't need to continue is a decision has been made
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
 			if !assertOk {
-				r.Log.Error(apperrors.ErrAssertionFailed.Error())
+				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
 			}
 			if scope.AccessDenied {
@@ -655,7 +659,7 @@ func (r *OauthProxy) admissionMiddleware(resource *authorization.Resource) func(
 				lLog.Warn("access denied, invalid roles",
 					zap.String("roles", resource.GetRoles()))
 				//nolint:contextcheck
-				next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+				next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 				return
 			}
 
@@ -672,7 +676,7 @@ func (r *OauthProxy) admissionMiddleware(resource *authorization.Resource) func(
 							zap.String("headers", resource.GetHeaders()))
 
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 						return
 					}
 
@@ -692,7 +696,7 @@ func (r *OauthProxy) admissionMiddleware(resource *authorization.Resource) func(
 						zap.String("headers", resource.GetHeaders()))
 
 					//nolint:contextcheck
-					next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+					next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 					return
 				}
 			}
@@ -702,15 +706,15 @@ func (r *OauthProxy) admissionMiddleware(resource *authorization.Resource) func(
 				lLog.Warn("access denied, invalid groups",
 					zap.String("groups", strings.Join(resource.Groups, ",")))
 				//nolint:contextcheck
-				next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+				next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 				return
 			}
 
 			// step: if we have any claim matching, lets validate the tokens has the claims
 			for claimName, match := range claimMatches {
-				if !r.checkClaim(user, claimName, match, resource.URL) {
+				if !checkClaim(scope.Logger, user, claimName, match, resource.URL) {
 					//nolint:contextcheck
-					next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+					next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 					return
 				}
 			}
@@ -727,7 +731,7 @@ func (r *OauthProxy) admissionMiddleware(resource *authorization.Resource) func(
 }
 
 // responseHeaderMiddleware is responsible for adding response headers
-func (r *OauthProxy) responseHeaderMiddleware(headers map[string]string) func(http.Handler) http.Handler {
+func responseHeaderMiddleware(headers map[string]string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			// @step: inject any custom response headers
@@ -743,15 +747,23 @@ func (r *OauthProxy) responseHeaderMiddleware(headers map[string]string) func(ht
 // identityHeadersMiddleware is responsible for adding the authentication headers to upstream
 //
 //nolint:cyclop
-func (r *OauthProxy) identityHeadersMiddleware(custom []string) func(http.Handler) http.Handler {
+func identityHeadersMiddleware(
+	logger *zap.Logger,
+	custom []string,
+	cookieAccessName string,
+	cookieRefreshName string,
+	noProxy bool,
+	enableTokenHeader bool,
+	enableAuthzHeader bool,
+	enableAuthzCookies bool,
+) func(http.Handler) http.Handler {
 	customClaims := make(map[string]string)
-
 	const minSliceLength int = 1
+	cookieFilter := []string{cookieAccessName, cookieRefreshName}
 
 	for _, val := range custom {
 		xslices := strings.Split(val, "|")
 		val = xslices[0]
-
 		if len(xslices) > minSliceLength {
 			customClaims[val] = utils.ToHeader(xslices[1])
 		} else {
@@ -759,19 +771,16 @@ func (r *OauthProxy) identityHeadersMiddleware(custom []string) func(http.Handle
 		}
 	}
 
-	cookieFilter := []string{r.Config.CookieAccessName, r.Config.CookieRefreshName}
-
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
-
 			if !assertOk {
-				r.Log.Error(apperrors.ErrAssertionFailed.Error())
+				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
 			}
 
 			var headers http.Header
-			if r.Config.NoProxy {
+			if noProxy {
 				headers = wrt.Header()
 			} else {
 				headers = req.Header
@@ -789,15 +798,15 @@ func (r *OauthProxy) identityHeadersMiddleware(custom []string) func(http.Handle
 				headers.Set("X-Auth-Username", user.Name)
 
 				// should we add the token header?
-				if r.Config.EnableTokenHeader {
+				if enableTokenHeader {
 					headers.Set("X-Auth-Token", user.RawToken)
 				}
 				// add the authorization header if requested
-				if r.Config.EnableAuthorizationHeader {
+				if enableAuthzHeader {
 					headers.Set("Authorization", fmt.Sprintf("Bearer %s", user.RawToken))
 				}
 				// are we filtering out the cookies
-				if !r.Config.EnableAuthorizationCookies {
+				if !enableAuthzCookies {
 					_ = filterCookies(req, cookieFilter)
 				}
 				// inject any custom claims
@@ -814,85 +823,103 @@ func (r *OauthProxy) identityHeadersMiddleware(custom []string) func(http.Handle
 }
 
 // securityMiddleware performs numerous security checks on the request
-func (r *OauthProxy) securityMiddleware(next http.Handler) http.Handler {
-	r.Log.Info("enabling the security filter middleware")
+func securityMiddleware(
+	logger *zap.Logger,
+	allowedHosts []string,
+	browserXSSFilter bool,
+	contentSecurityPolicy string,
+	contentTypeNosniff bool,
+	frameDeny bool,
+	sslRedirect bool,
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		logger.Info("enabling the security filter middleware")
 
-	secure := secure.New(secure.Options{
-		AllowedHosts:          r.Config.Hostnames,
-		BrowserXssFilter:      r.Config.EnableBrowserXSSFilter,
-		ContentSecurityPolicy: r.Config.ContentSecurityPolicy,
-		ContentTypeNosniff:    r.Config.EnableContentNoSniff,
-		FrameDeny:             r.Config.EnableFrameDeny,
-		SSLProxyHeaders:       map[string]string{"X-Forwarded-Proto": "https"},
-		SSLRedirect:           r.Config.EnableHTTPSRedirect,
-	})
+		secure := secure.New(secure.Options{
+			AllowedHosts:          allowedHosts,
+			BrowserXssFilter:      browserXSSFilter,
+			ContentSecurityPolicy: contentSecurityPolicy,
+			ContentTypeNosniff:    contentTypeNosniff,
+			FrameDeny:             frameDeny,
+			SSLProxyHeaders:       map[string]string{"X-Forwarded-Proto": "https"},
+			SSLRedirect:           sslRedirect,
+		})
 
-	return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
-		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+			if !assertOk {
+				logger.Error(apperrors.ErrAssertionFailed.Error())
+				return
+			}
 
-		if !assertOk {
-			r.Log.Error(apperrors.ErrAssertionFailed.Error())
-			return
-		}
+			if err := secure.Process(wrt, req); err != nil {
+				scope.Logger.Warn("failed security middleware", zap.Error(err))
+				//nolint:contextcheck
+				next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
+				return
+			}
 
-		if err := secure.Process(wrt, req); err != nil {
-			scope.Logger.Warn("failed security middleware", zap.Error(err))
-			//nolint:contextcheck
-			next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
-			return
-		}
-
-		next.ServeHTTP(wrt, req)
-	})
+			next.ServeHTTP(wrt, req)
+		})
+	}
 }
 
 // methodCheck middleware
-func (r *OauthProxy) methodCheckMiddleware(next http.Handler) http.Handler {
-	r.Log.Info("enabling the method check middleware")
+func methodCheckMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		logger.Info("enabling the method check middleware")
 
-	return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
-		if !utils.IsValidHTTPMethod(req.Method) {
-			r.Log.Warn("method not implemented ", zap.String("method", req.Method))
-			wrt.WriteHeader(http.StatusNotImplemented)
-			return
-		}
+		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			if !utils.IsValidHTTPMethod(req.Method) {
+				logger.Warn("method not implemented ", zap.String("method", req.Method))
+				wrt.WriteHeader(http.StatusNotImplemented)
+				return
+			}
 
-		next.ServeHTTP(wrt, req)
-	})
+			next.ServeHTTP(wrt, req)
+		})
+	}
 }
 
 // proxyDenyMiddleware just block everything
-func (r *OauthProxy) proxyDenyMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
-		ctxVal := req.Context().Value(constant.ContextScopeName)
+func proxyDenyMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			ctxVal := req.Context().Value(constant.ContextScopeName)
 
-		var scope *RequestScope
-		if ctxVal == nil {
-			scope = &RequestScope{}
-		} else {
-			var assertOk bool
-			scope, assertOk = ctxVal.(*RequestScope)
-			if !assertOk {
-				r.Log.Error(apperrors.ErrAssertionFailed.Error())
-				return
+			var scope *RequestScope
+			if ctxVal == nil {
+				scope = &RequestScope{}
+			} else {
+				var assertOk bool
+				scope, assertOk = ctxVal.(*RequestScope)
+				if !assertOk {
+					logger.Error(apperrors.ErrAssertionFailed.Error())
+					return
+				}
 			}
-		}
 
-		scope.AccessDenied = true
-		// update the request context
-		ctx := context.WithValue(req.Context(), constant.ContextScopeName, scope)
+			scope.AccessDenied = true
+			// update the request context
+			ctx := context.WithValue(req.Context(), constant.ContextScopeName, scope)
 
-		next.ServeHTTP(wrt, req.WithContext(ctx))
-	})
+			next.ServeHTTP(wrt, req.WithContext(ctx))
+		})
+	}
 }
 
-// deny middleware
-func (r *OauthProxy) denyMiddleware(_ http.Handler) http.Handler {
-	r.Log.Info("enabling the deny middleware")
-
-	return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
-		r.accessForbidden(wrt, req)
-	})
+// denyMiddleware
+func denyMiddleware(
+	logger *zap.Logger,
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+) func(http.Handler) http.Handler {
+	return func(_ http.Handler) http.Handler {
+		logger.Info("enabling the deny middleware")
+		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			accessForbidden(wrt, req)
+		})
+	}
 }
 
 // hmacMiddleware verifies hmac

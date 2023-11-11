@@ -27,47 +27,53 @@ import (
 )
 
 // GetIdentity retrieves the user identity from a request, either from a session cookie or a bearer token
-func (r *OauthProxy) GetIdentity(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error) {
-	var isBearer bool
-	// step: check for a bearer token or cookie with jwt token
-	access, isBearer, err := utils.GetTokenInRequest(
-		req,
-		tokenCookie,
-		r.Config.SkipAuthorizationHeaderIdentity,
-		tokenHeader,
-	)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie && !isBearer {
-		if access, err = encryption.DecodeText(access, r.Config.EncryptionKey); err != nil {
-			return nil, apperrors.ErrDecryption
+func GetIdentity(
+	logger *zap.Logger,
+	skipAuthorizationHeaderIdentity bool,
+	enableEncryptedToken bool,
+	forceEncryptedCookie bool,
+	encKey string,
+) func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error) {
+	return func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error) {
+		var isBearer bool
+		// step: check for a bearer token or cookie with jwt token
+		access, isBearer, err := utils.GetTokenInRequest(
+			req,
+			tokenCookie,
+			skipAuthorizationHeaderIdentity,
+			tokenHeader,
+		)
+		if err != nil {
+			return nil, err
 		}
+
+		if enableEncryptedToken || forceEncryptedCookie && !isBearer {
+			if access, err = encryption.DecodeText(access, encKey); err != nil {
+				return nil, apperrors.ErrDecryption
+			}
+		}
+
+		rawToken := access
+		token, err := jwt.ParseSigned(access)
+		if err != nil {
+			return nil, err
+		}
+
+		user, err := ExtractIdentity(token)
+		if err != nil {
+			return nil, err
+		}
+
+		user.BearerToken = isBearer
+		user.RawToken = rawToken
+
+		logger.Debug("found the user identity",
+			zap.String("id", user.ID),
+			zap.String("name", user.Name),
+			zap.String("email", user.Email),
+			zap.String("roles", strings.Join(user.Roles, ",")),
+			zap.String("groups", strings.Join(user.Groups, ",")))
+
+		return user, nil
 	}
-
-	rawToken := access
-	token, err := jwt.ParseSigned(access)
-
-	if err != nil {
-		return nil, err
-	}
-
-	user, err := ExtractIdentity(token)
-	if err != nil {
-		return nil, err
-	}
-
-	user.BearerToken = isBearer
-	user.RawToken = rawToken
-
-	r.Log.Debug("found the user identity",
-		zap.String("id", user.ID),
-		zap.String("name", user.Name),
-		zap.String("email", user.Email),
-		zap.String("roles", strings.Join(user.Roles, ",")),
-		zap.String("groups", strings.Join(user.Groups, ",")))
-
-	return user, nil
 }

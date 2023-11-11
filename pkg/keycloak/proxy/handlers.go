@@ -27,13 +27,13 @@ import (
 
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 	"time"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/grokify/go-pkce"
 	"go.uber.org/zap"
@@ -154,21 +154,13 @@ func (r *OauthProxy) oauthAuthorizationHandler(wrt http.ResponseWriter, req *htt
 	)
 
 	// step: if we have a custom sign in page, lets display that
-	if r.Config.HasCustomSignInPage() {
-		model := make(map[string]string)
-		model["redirect"] = authURL
-
-		wrt.WriteHeader(http.StatusOK)
-		_ = r.Render(
-			wrt,
-			path.Base(r.Config.SignInPage),
-			utils.MergeMaps(model, r.Config.Tags),
-		)
+	if r.Config.SignInPage != "" {
+		r.customSignInPage(wrt, r.Config.SignInPage)
 		return
 	}
 
 	scope.Logger.Debug("redirecting to auth_url", zap.String("auth_url", authURL))
-	r.redirectToURL(authURL, wrt, req, http.StatusSeeOther)
+	r.redirectToURL(scope.Logger, authURL, wrt, req, http.StatusSeeOther)
 }
 
 /*
@@ -203,7 +195,7 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 	}
 
 	// @metric a token has been issued
-	oauthTokensMetric.WithLabelValues("issued").Inc()
+	metrics.OauthTokensMetric.WithLabelValues("issued").Inc()
 
 	oidcTokensCookiesExp := time.Until(stdClaims.Expiry.Time())
 	// step: does the response have a refresh token and we do NOT ignore refresh tokens?
@@ -305,7 +297,7 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 	}
 
 	scope.Logger.Debug("redirecting to", zap.String("location", redirectURI))
-	r.redirectToURL(redirectURI, writer, req, http.StatusSeeOther)
+	r.redirectToURL(scope.Logger, redirectURI, writer, req, http.StatusSeeOther)
 }
 
 /*
@@ -365,7 +357,7 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 		}
 
 		// @metric observe the time taken for a login request
-		oauthLatencyMetric.WithLabelValues("login").Observe(time.Since(start).Seconds())
+		metrics.OauthLatencyMetric.WithLabelValues("login").Observe(time.Since(start).Seconds())
 
 		accessToken := token.AccessToken
 		refreshToken := ""
@@ -480,7 +472,7 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 		}
 
 		// @metric a token has been issued
-		oauthTokensMetric.WithLabelValues("login").Inc()
+		metrics.OauthTokensMetric.WithLabelValues("login").Inc()
 		tokenScope := token.Extra("scope")
 		var tScope string
 
@@ -593,7 +585,7 @@ func (r *OauthProxy) logoutHandler(writer http.ResponseWriter, req *http.Request
 	r.ClearAllCookies(req, writer)
 
 	// @metric increment the logout counter
-	oauthTokensMetric.WithLabelValues("logout").Inc()
+	metrics.OauthTokensMetric.WithLabelValues("logout").Inc()
 
 	// step: check if the user has a state session and if so revoke it
 	if r.useStore() {
@@ -628,6 +620,7 @@ func (r *OauthProxy) logoutHandler(writer http.ResponseWriter, req *http.Request
 		)
 
 		r.redirectToURL(
+			scope.Logger,
 			sendTo,
 			writer,
 			req,
@@ -691,7 +684,7 @@ func (r *OauthProxy) logoutHandler(writer http.ResponseWriter, req *http.Request
 
 		defer response.Body.Close()
 
-		oauthLatencyMetric.WithLabelValues("revocation").
+		metrics.OauthLatencyMetric.WithLabelValues("revocation").
 			Observe(time.Since(start).Seconds())
 
 		// step: check the response
@@ -717,72 +710,83 @@ func (r *OauthProxy) logoutHandler(writer http.ResponseWriter, req *http.Request
 
 	// step: should we redirect the user
 	if redirectURL != "" {
-		r.redirectToURL(redirectURL, writer, req, http.StatusSeeOther)
+		r.redirectToURL(scope.Logger, redirectURL, writer, req, http.StatusSeeOther)
 	}
 }
 
 // expirationHandler checks if the token has expired
-func (r *OauthProxy) expirationHandler(wrt http.ResponseWriter, req *http.Request) {
-	user, err := r.GetIdentity(req, r.Config.CookieAccessName, "")
+func expirationHandler(
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
+	cookieAccessName string,
+) func(wrt http.ResponseWriter, req *http.Request) {
+	return func(wrt http.ResponseWriter, req *http.Request) {
+		user, err := getIdentity(req, cookieAccessName, "")
+		if err != nil {
+			wrt.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 
-	if err != nil {
-		wrt.WriteHeader(http.StatusUnauthorized)
-		return
+		if user.IsExpired() {
+			wrt.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		wrt.WriteHeader(http.StatusOK)
 	}
-
-	if user.IsExpired() {
-		wrt.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	wrt.WriteHeader(http.StatusOK)
 }
 
 // tokenHandler display access token to screen
-func (r *OauthProxy) tokenHandler(wrt http.ResponseWriter, req *http.Request) {
-	user, err := r.GetIdentity(req, r.Config.CookieAccessName, "")
+func tokenHandler(
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
+	cookieAccessName string,
+	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
+) func(wrt http.ResponseWriter, req *http.Request) {
+	return func(wrt http.ResponseWriter, req *http.Request) {
+		user, err := getIdentity(req, cookieAccessName, "")
+		if err != nil {
+			accessError(wrt, req)
+			return
+		}
 
-	if err != nil {
-		r.accessError(wrt, req)
-		return
+		token, err := jwt.ParseSigned(user.RawToken)
+		if err != nil {
+			accessError(wrt, req)
+			return
+		}
+
+		jsonMap := make(map[string]interface{})
+		err = token.UnsafeClaimsWithoutVerification(&jsonMap)
+		if err != nil {
+			accessError(wrt, req)
+			return
+		}
+
+		result, err := json.Marshal(jsonMap)
+		if err != nil {
+			accessError(wrt, req)
+			return
+		}
+
+		wrt.Header().Set("Content-Type", "application/json")
+		_, _ = wrt.Write(result)
 	}
-
-	token, err := jwt.ParseSigned(user.RawToken)
-
-	if err != nil {
-		r.accessError(wrt, req)
-		return
-	}
-
-	jsonMap := make(map[string]interface{})
-	err = token.UnsafeClaimsWithoutVerification(&jsonMap)
-
-	if err != nil {
-		r.accessError(wrt, req)
-		return
-	}
-
-	result, err := json.Marshal(jsonMap)
-
-	if err != nil {
-		r.accessError(wrt, req)
-		return
-	}
-
-	wrt.Header().Set("Content-Type", "application/json")
-
-	_, _ = wrt.Write(result)
 }
 
 // proxyMetricsHandler forwards the request into the prometheus handler
-func (r *OauthProxy) proxyMetricsHandler(wrt http.ResponseWriter, req *http.Request) {
-	if r.Config.LocalhostMetrics {
-		if !net.ParseIP(utils.RealIP(req)).IsLoopback() {
-			r.accessForbidden(wrt, req)
-			return
+func proxyMetricsHandler(
+	localhostMetrics bool,
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+	metricsHandler http.Handler,
+) func(wrt http.ResponseWriter, req *http.Request) {
+	return func(wrt http.ResponseWriter, req *http.Request) {
+		if localhostMetrics {
+			if !net.ParseIP(utils.RealIP(req)).IsLoopback() {
+				accessForbidden(wrt, req)
+				return
+			}
 		}
+		metricsHandler.ServeHTTP(wrt, req)
 	}
-	r.metricsHandler.ServeHTTP(wrt, req)
 }
 
 // retrieveRefreshToken retrieves the refresh token from store or cookie

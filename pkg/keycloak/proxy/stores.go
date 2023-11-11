@@ -39,7 +39,6 @@ func (r *OauthProxy) StoreRefreshToken(ctx context.Context, token string, value 
 func (r *OauthProxy) GetRefreshToken(ctx context.Context, token string) (string, error) {
 	// step: the key is the access token
 	val, err := r.Store.Get(ctx, utils.GetHashKey(token))
-
 	if err != nil {
 		return val, err
 	}
@@ -54,10 +53,8 @@ func (r *OauthProxy) GetRefreshToken(ctx context.Context, token string) (string,
 func (r *OauthProxy) DeleteRefreshToken(ctx context.Context, token string) error {
 	if err := r.Store.Delete(ctx, utils.GetHashKey(token)); err != nil {
 		r.Log.Error("unable to delete token", zap.Error(err))
-
 		return err
 	}
-
 	return nil
 }
 
@@ -66,6 +63,5 @@ func (r *OauthProxy) CloseStore() error {
 	if r.Store != nil {
 		return r.Store.Close()
 	}
-
 	return nil
 }

@@ -49,7 +49,7 @@ func TestNewKeycloakProxy(t *testing.T) {
 	cfg.Listen = randomLocalHost
 	cfg.ListenHTTP = ""
 
-	proxy, err := proxy.NewProxy(cfg)
+	proxy, err := proxy.NewProxy(cfg, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, proxy)
 	assert.NotNil(t, proxy.Config)
@@ -69,7 +69,7 @@ func TestNewKeycloakProxyWithLegacyDiscoveryURI(t *testing.T) {
 	cfg.Listen = randomLocalHost
 	cfg.ListenHTTP = ""
 
-	proxy, err := proxy.NewProxy(cfg)
+	proxy, err := proxy.NewProxy(cfg, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, proxy)
 	assert.NotNil(t, proxy.Config)

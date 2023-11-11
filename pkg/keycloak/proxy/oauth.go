@@ -24,6 +24,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/grokify/go-pkce"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
@@ -94,8 +95,8 @@ func getRefreshedToken(conf *oauth2.Config, proxyConfig *config.Config, oldRefre
 	}
 
 	taken := time.Since(start).Seconds()
-	oauthTokensMetric.WithLabelValues("renew").Inc()
-	oauthLatencyMetric.WithLabelValues("renew").Observe(taken)
+	metrics.OauthTokensMetric.WithLabelValues("renew").Inc()
+	metrics.OauthLatencyMetric.WithLabelValues("renew").Observe(taken)
 
 	token, err := jwt.ParseSigned(tkn.AccessToken)
 
@@ -217,11 +218,11 @@ func getToken(
 
 	switch grantType {
 	case core.GrantTypeAuthCode:
-		oauthTokensMetric.WithLabelValues("exchange").Inc()
-		oauthLatencyMetric.WithLabelValues("exchange").Observe(taken)
+		metrics.OauthTokensMetric.WithLabelValues("exchange").Inc()
+		metrics.OauthLatencyMetric.WithLabelValues("exchange").Observe(taken)
 	case core.GrantTypeRefreshToken:
-		oauthTokensMetric.WithLabelValues("renew").Inc()
-		oauthLatencyMetric.WithLabelValues("renew").Observe(taken)
+		metrics.OauthTokensMetric.WithLabelValues("renew").Inc()
+		metrics.OauthLatencyMetric.WithLabelValues("renew").Observe(taken)
 	}
 
 	return token, err

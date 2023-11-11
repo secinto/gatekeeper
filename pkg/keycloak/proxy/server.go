@@ -52,6 +52,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
 	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/handlers"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/prometheus/client_golang/prometheus"
@@ -63,22 +64,25 @@ import (
 func init() {
 	_, _ = time.LoadLocation("UTC")      // ensure all time is in UTC [NOTE(fredbi): no this does just nothing]
 	runtime.GOMAXPROCS(runtime.NumCPU()) // set the core
-	prometheus.MustRegister(certificateRotationMetric)
-	prometheus.MustRegister(latencyMetric)
-	prometheus.MustRegister(oauthLatencyMetric)
-	prometheus.MustRegister(oauthTokensMetric)
-	prometheus.MustRegister(statusMetric)
+	prometheus.MustRegister(metrics.CertificateRotationMetric)
+	prometheus.MustRegister(metrics.LatencyMetric)
+	prometheus.MustRegister(metrics.OauthLatencyMetric)
+	prometheus.MustRegister(metrics.OauthTokensMetric)
+	prometheus.MustRegister(metrics.StatusMetric)
 }
 
 // NewProxy create's a new proxy from configuration
 //
 //nolint:cyclop
-func NewProxy(config *config.Config) (*OauthProxy, error) {
+func NewProxy(config *config.Config, log *zap.Logger) (*OauthProxy, error) {
+	var err error
 	// create the service logger
-	log, err := createLogger(config)
+	if log == nil {
+		log, err = createLogger(config)
 
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	err = config.Update()
@@ -198,7 +202,7 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 	engine.NotFound(handlers.EmptyHandler)
 
 	if r.Config.EnableDefaultDeny || r.Config.EnableDefaultDenyStrict {
-		engine.Use(r.methodCheckMiddleware)
+		engine.Use(methodCheckMiddleware(r.Log))
 	} else {
 		engine.MethodNotAllowed(handlers.EmptyHandler)
 	}
@@ -208,7 +212,7 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 	// @check if the request tracking id middleware is enabled
 	if r.Config.EnableRequestID {
 		r.Log.Info("enabled the correlation request id middleware")
-		engine.Use(r.requestIDMiddleware(r.Config.RequestIDHeader))
+		engine.Use(requestIDMiddleware(r.Config.RequestIDHeader))
 	}
 
 	if r.Config.EnableCompression {
@@ -216,14 +220,56 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 	}
 
 	// @step: enable the entrypoint middleware
-	engine.Use(r.entrypointMiddleware)
+	engine.Use(entrypointMiddleware(r.Log))
 
 	if r.Config.EnableLogging {
-		engine.Use(r.loggingMiddleware)
+		engine.Use(loggingMiddleware(r.Log, r.Config.Verbose))
 	}
 
+	// step: load the templates if any
+	tmpl := createTemplates(
+		r.Log,
+		r.Config.SignInPage,
+		r.Config.ForbiddenPage,
+		r.Config.ErrorPage,
+	)
+
+	r.accessForbidden = accessForbidden(
+		r.Log,
+		http.StatusForbidden,
+		r.Config.ForbiddenPage,
+		r.Config.Tags,
+		tmpl,
+	)
+
+	r.accessError = accessForbidden(
+		r.Log,
+		http.StatusBadRequest,
+		r.Config.ErrorPage,
+		r.Config.Tags,
+		tmpl,
+	)
+
+	r.customSignInPage = customSignInPage(
+		r.Log,
+		r.Config.SignInPage,
+		r.Config.Tags,
+		tmpl,
+	)
+
 	if r.Config.EnableSecurityFilter {
-		engine.Use(r.securityMiddleware)
+		engine.Use(
+			securityMiddleware(
+				r.Log,
+				r.Config.Hostnames,
+				r.Config.EnableBrowserXSSFilter,
+				r.Config.ContentSecurityPolicy,
+				r.Config.EnableContentNoSniff,
+				r.Config.EnableFrameDeny,
+				r.Config.EnableHTTPSRedirect,
+				r.accessForbidden,
+			),
+		)
 	}
 }
 
@@ -242,6 +288,14 @@ func (r *OauthProxy) CreateReverseProxy() error {
 
 	engine := chi.NewRouter()
 	r.useDefaultStack(engine)
+
+	r.GetIdentity = GetIdentity(
+		r.Log,
+		r.Config.SkipAuthorizationHeaderIdentity,
+		r.Config.EnableEncryptedToken,
+		r.Config.ForceEncryptedCookie,
+		r.Config.EncryptionKey,
+	)
 
 	if r.Config.EnableHmac {
 		engine.Use(hmacMiddleware(r.Log, r.Config.EncryptionKey))
@@ -269,7 +323,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 	r.Router = engine
 
 	if len(r.Config.ResponseHeaders) > 0 {
-		engine.Use(r.responseHeaderMiddleware(r.Config.ResponseHeaders))
+		engine.Use(responseHeaderMiddleware(r.Config.ResponseHeaders))
 	}
 
 	// step: define admin subrouter: health and metrics
@@ -287,17 +341,27 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			"enabled the service metrics middleware",
 			zap.String("path", path.Clean(r.Config.WithOAuthURI(constant.MetricsURL))),
 		)
-		adminEngine.Get(constant.MetricsURL, r.proxyMetricsHandler)
+		adminEngine.Get(
+			constant.MetricsURL,
+			proxyMetricsHandler(
+				r.Config.LocalhostMetrics,
+				r.accessForbidden,
+				r.metricsHandler,
+			),
+		)
 	}
 
 	// step: add the routing for oauth
-	engine.With(r.proxyDenyMiddleware).Route(r.Config.BaseURI+r.Config.OAuthURI, func(eng chi.Router) {
+	engine.With(proxyDenyMiddleware(r.Log)).Route(r.Config.BaseURI+r.Config.OAuthURI, func(eng chi.Router) {
 		eng.MethodNotAllowed(handlers.MethodNotAllowHandlder)
 		eng.HandleFunc(constant.AuthorizationURL, r.oauthAuthorizationHandler)
 		eng.Get(constant.CallbackURL, r.oauthCallbackHandler)
-		eng.Get(constant.ExpiredURL, r.expirationHandler)
+		eng.Get(constant.ExpiredURL, expirationHandler(r.GetIdentity, r.Config.CookieAccessName))
 		eng.With(r.authenticationMiddleware()).Get(constant.LogoutURL, r.logoutHandler)
-		eng.With(r.authenticationMiddleware()).Get(constant.TokenURL, r.tokenHandler)
+		eng.With(r.authenticationMiddleware()).Get(
+			constant.TokenURL,
+			tokenHandler(r.GetIdentity, r.Config.CookieAccessName, r.accessError),
+		)
 		eng.Post(constant.LoginURL, r.loginHandler)
 		eng.Get(constant.DiscoveryURL, r.discoveryHandler)
 
@@ -327,7 +391,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		}
 
 		if r.Config.ListenAdmin == "" {
-			engine.With(r.proxyDenyMiddleware).Mount(constant.DebugURL, debugEngine)
+			engine.With(proxyDenyMiddleware(r.Log)).Mount(constant.DebugURL, debugEngine)
 		}
 	}
 
@@ -339,7 +403,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		admin.MethodNotAllowed(handlers.EmptyHandler)
 		admin.NotFound(handlers.EmptyHandler)
 		admin.Use(middleware.Recoverer)
-		admin.Use(r.proxyDenyMiddleware)
+		admin.Use(proxyDenyMiddleware(r.Log))
 		admin.Route("/", func(e chi.Router) {
 			e.Mount(r.Config.OAuthURI, adminEngine)
 			if debugEngine != nil {
@@ -358,11 +422,6 @@ func (r *OauthProxy) CreateReverseProxy() error {
 
 	if r.Config.EnableSessionCookies {
 		r.Log.Info("using session cookies only for access and refresh tokens")
-	}
-
-	// step: load the templates if any
-	if err := r.createTemplates(); err != nil {
-		return err
 	}
 
 	// step: add custom http methods
@@ -408,14 +467,28 @@ func (r *OauthProxy) CreateReverseProxy() error {
 
 		middlewares := []func(http.Handler) http.Handler{
 			r.authenticationMiddleware(),
-			r.admissionMiddleware(res),
-			r.identityHeadersMiddleware(r.Config.AddClaims),
+			admissionMiddleware(
+				r.Log,
+				res,
+				r.Config.MatchClaims,
+				r.accessForbidden,
+			),
+			identityHeadersMiddleware(
+				r.Log,
+				r.Config.AddClaims,
+				r.Config.CookieAccessName,
+				r.Config.CookieRefreshName,
+				r.Config.NoProxy,
+				r.Config.EnableTokenHeader,
+				r.Config.EnableAuthorizationHeader,
+				r.Config.EnableAuthorizationCookies,
+			),
 		}
 
 		if res.URL == constant.AllPath && !res.WhiteListed && enableDefaultDenyStrict {
 			middlewares = []func(http.Handler) http.Handler{
-				r.denyMiddleware,
-				r.proxyDenyMiddleware,
+				denyMiddleware(r.Log, r.accessForbidden),
+				proxyDenyMiddleware(r.Log),
 			}
 		}
 
@@ -423,8 +496,22 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			middlewares = []func(http.Handler) http.Handler{
 				r.authenticationMiddleware(),
 				r.authorizationMiddleware(),
-				r.admissionMiddleware(res),
-				r.identityHeadersMiddleware(r.Config.AddClaims),
+				admissionMiddleware(
+					r.Log,
+					res,
+					r.Config.MatchClaims,
+					r.accessForbidden,
+				),
+				identityHeadersMiddleware(
+					r.Log,
+					r.Config.AddClaims,
+					r.Config.CookieAccessName,
+					r.Config.CookieRefreshName,
+					r.Config.NoProxy,
+					r.Config.EnableTokenHeader,
+					r.Config.EnableAuthorizationHeader,
+					r.Config.EnableAuthorizationCookies,
+				),
 			}
 		}
 
@@ -525,7 +612,7 @@ func (r *OauthProxy) createForwardingProxy() error {
 				}
 
 				latency := time.Since(start)
-				latencyMetric.Observe(latency.Seconds())
+				metrics.LatencyMetric.Observe(latency.Seconds())
 
 				r.Log.Info("client request",
 					zap.String("method", resp.Request.Method),
@@ -855,7 +942,7 @@ func (r *OauthProxy) createHTTPListener(config listenerConfig) (net.Listener, er
 				config.certificate,
 				config.privateKey,
 				r.Log,
-				&certificateRotationMetric,
+				&metrics.CertificateRotationMetric,
 			)
 
 			if err != nil {
@@ -1000,43 +1087,44 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 }
 
 // createTemplates loads the custom template
-func (r *OauthProxy) createTemplates() error {
+func createTemplates(
+	logger *zap.Logger,
+	signInPage string,
+	forbiddenPage string,
+	errorPage string,
+) *template.Template {
 	var list []string
-
-	if r.Config.SignInPage != "" {
-		r.Log.Debug(
+	if signInPage != "" {
+		logger.Debug(
 			"loading the custom sign in page",
-			zap.String("page", r.Config.SignInPage),
+			zap.String("page", signInPage),
 		)
-
-		list = append(list, r.Config.SignInPage)
+		list = append(list, signInPage)
 	}
 
-	if r.Config.ForbiddenPage != "" {
-		r.Log.Debug(
+	if forbiddenPage != "" {
+		logger.Debug(
 			"loading the custom sign forbidden page",
-			zap.String("page", r.Config.ForbiddenPage),
+			zap.String("page", forbiddenPage),
 		)
-
-		list = append(list, r.Config.ForbiddenPage)
+		list = append(list, forbiddenPage)
 	}
 
-	if r.Config.ErrorPage != "" {
-		r.Log.Debug(
+	if errorPage != "" {
+		logger.Debug(
 			"loading the custom error page",
-			zap.String("page", r.Config.ErrorPage),
+			zap.String("page", errorPage),
 		)
-
-		list = append(list, r.Config.ErrorPage)
+		list = append(list, errorPage)
 	}
 
 	if len(list) > 0 {
-		r.Log.Info(
+		logger.Info(
 			"loading the custom templates",
 			zap.String("templates", strings.Join(list, ",")),
 		)
 
-		r.templates = template.Must(template.ParseFiles(list...))
+		return template.Must(template.ParseFiles(list...))
 	}
 
 	return nil
@@ -1144,9 +1232,4 @@ func (r *OauthProxy) NewOpenIDProvider() (*oidc3.Provider, *gocloak.GoCloak, err
 	}
 
 	return provider, client, nil
-}
-
-// Render implements the echo Render interface
-func (r *OauthProxy) Render(w io.Writer, name string, data interface{}) error {
-	return r.templates.ExecuteTemplate(w, name, data)
 }
