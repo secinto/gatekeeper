@@ -140,5 +140,6 @@ var (
 	ErrTooManyDefaultDenyOpts    = errors.New(
 		"only one of enable-default-deny/enable-default-deny-strict can be true",
 	)
-	ErrHmacRequiresEncKey = errors.New("enable-hmac requires encryption key")
+	ErrHmacRequiresEncKey                   = errors.New("enable-hmac requires encryption key")
+	ErrPostLogoutRedirectURIRequiresIDToken = errors.New("post logout redirect uri requires id token, enable id token cookie")
 )

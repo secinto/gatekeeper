@@ -268,6 +268,7 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 			"--secure-cookie=false",
 			"--enable-idp-session-check=true",
 			"--enable-logout-redirect=true",
+			"--enable-id-token-cookie=true",
 			"--post-logout-redirect-uri=http://google.com",
 		}
 
@@ -293,6 +294,7 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 			"--cookie-pkce-name=" + pkceCookieName,
 			"--enable-idp-session-check=true",
 			"--enable-logout-redirect=true",
+			"--enable-id-token-cookie=true",
 			"--post-logout-redirect-uri=http://google.com",
 		}
 

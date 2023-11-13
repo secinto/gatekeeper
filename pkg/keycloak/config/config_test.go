@@ -2377,3 +2377,45 @@ func TestIsEnableHmacValid(t *testing.T) {
 		)
 	}
 }
+
+func TestIsPostLogoutRedirectURIValid(t *testing.T) {
+	testCases := []struct {
+		Name   string
+		Config *Config
+		Valid  bool
+	}{
+		{
+			Name: "ValidIsPostLogoutRedirectURIValid",
+			Config: &Config{
+				EnableIDTokenCookie:   true,
+				PostLogoutRedirectURI: "http://tata.com",
+			},
+			Valid: true,
+		},
+		{
+			Name: "MissingIDTokenIsPostLogoutRedirectURIValid",
+			Config: &Config{
+				EnableIDTokenCookie:   false,
+				PostLogoutRedirectURI: "http://tata.com",
+			},
+			Valid: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				err := testCase.Config.isPostLogoutRedirectURIValid()
+				if err != nil && testCase.Valid {
+					t.Fatalf("Expected test not to fail")
+				}
+
+				if err == nil && !testCase.Valid {
+					t.Fatalf("Expected test to fail")
+				}
+			},
+		)
+	}
+}

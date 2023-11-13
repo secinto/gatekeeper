@@ -191,6 +191,7 @@ type Config struct {
 	// SameSiteCookie enforces cookies to be send only to same site requests.
 	SameSiteCookie string `env:"SAME_SITE_COOKIE" json:"same-site-cookie" usage:"enforces cookies to be send only to same site requests according to the policy (can be Strict|Lax|None)" yaml:"same-site-cookie"`
 
+	EnableIDTokenCookie bool `env:"ENABLE_IDTOKEN_COOKIE" json:"enable-id-token-cookie" usage:"enable id token cookie" yaml:"enable-id-token-cookie"`
 	// MatchClaims is a series of checks, the claims in the token must match those here
 	MatchClaims map[string]string `json:"match-claims" usage:"keypair values for matching access token claims e.g. aud=myapp, iss=http://example.*" yaml:"match-claims"`
 	// AddClaims is a series of claims that should be added to the auth headers
@@ -678,6 +679,7 @@ func (r *Config) isReverseProxySettingsValid() error {
 			r.isPKCEValid,
 			r.isPostLoginRedirectValid,
 			r.isEnableHmacValid,
+			r.isPostLogoutRedirectURIValid,
 		}
 
 		for _, validationFunc := range validationRegistry {
@@ -985,6 +987,13 @@ func (r *Config) isPostLoginRedirectValid() error {
 func (r *Config) isEnableHmacValid() error {
 	if r.EnableHmac && r.EncryptionKey == "" {
 		return apperrors.ErrHmacRequiresEncKey
+	}
+	return nil
+}
+
+func (r *Config) isPostLogoutRedirectURIValid() error {
+	if r.PostLogoutRedirectURI != "" && !r.EnableIDTokenCookie {
+		return apperrors.ErrPostLogoutRedirectURIRequiresIDToken
 	}
 	return nil
 }

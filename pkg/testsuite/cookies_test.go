@@ -417,32 +417,7 @@ func TestCustomCookieNames(t *testing.T) {
 				cfg.CookieRequestURIName = customRedirectName
 				cfg.CookieIDTokenName = customIDTokenName
 				cfg.CookieAccessName = customAccessName
-			},
-			ExecutionSettings: []fakeRequest{
-				{
-					URI:           FakeAuthAllURL,
-					HasLogin:      true,
-					Redirects:     true,
-					OnResponse:    delay,
-					ExpectedProxy: true,
-					ExpectedCode:  http.StatusOK,
-					ExpectedLoginCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
-						customIDTokenName: func(t *testing.T, c *config.Config, value string) bool {
-							return assert.NotEqual(t, "", value)
-						},
-					},
-				},
-			},
-		},
-		{
-			Name: "TestCustomIDTokenCookiePresent",
-			ProxySettings: func(cfg *config.Config) {
-				cfg.Verbose = true
-				cfg.EnableLogging = true
-				cfg.CookieOAuthStateName = customStateName
-				cfg.CookieRequestURIName = customRedirectName
-				cfg.CookieIDTokenName = customIDTokenName
-				cfg.CookieAccessName = customAccessName
+				cfg.EnableIDTokenCookie = true
 			},
 			ExecutionSettings: []fakeRequest{
 				{

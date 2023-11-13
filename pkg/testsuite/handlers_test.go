@@ -305,6 +305,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 				conf.Verbose = true
 				conf.EnableLogging = true
 				conf.EncryptionKey = testEncryptionKey
+				conf.EnableIDTokenCookie = true
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -492,6 +493,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 				conf.EnableRefreshTokens = true
 				conf.EnableLogging = true
 				conf.EncryptionKey = testEncryptionKey
+				conf.EnableIDTokenCookie = true
 			},
 			ExecutionSettings: []fakeRequest{
 				{
