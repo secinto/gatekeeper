@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package proxy
+package cookie
 
 import (
 	"encoding/base64"
@@ -26,35 +26,56 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 )
 
+type Manager struct {
+	CookieDomain         string
+	BaseURI              string
+	HTTPOnlyCookie       bool
+	SecureCookie         bool
+	EnableSessionCookies bool
+	SameSiteCookie       string
+	CookieAccessName     string
+	CookieRefreshName    string
+	CookieIDTokenName    string
+	CookiePKCEName       string
+	CookieUMAName        string
+	CookieRequestURIName string
+	CookieOAuthStateName string
+	NoProxy              bool
+	NoRedirects          bool
+}
+
 // DropCookie drops a cookie into the response
-func (r *OauthProxy) DropCookie(wrt http.ResponseWriter, name, value string, duration time.Duration) {
+func (cm *Manager) DropCookie(
+	wrt http.ResponseWriter,
+	name,
+	value string,
+	duration time.Duration,
+) {
 	// step: default to the host header, else the config domain
 	domain := ""
-
-	if r.Config.CookieDomain != "" {
-		domain = r.Config.CookieDomain
+	if cm.CookieDomain != "" {
+		domain = cm.CookieDomain
 	}
 
-	path := r.Config.BaseURI
-
+	path := cm.BaseURI
 	if path == "" {
 		path = "/"
 	}
 
 	cookie := &http.Cookie{
 		Domain:   domain,
-		HttpOnly: r.Config.HTTPOnlyCookie,
+		HttpOnly: cm.HTTPOnlyCookie,
 		Name:     name,
 		Path:     path,
-		Secure:   r.Config.SecureCookie,
+		Secure:   cm.SecureCookie,
 		Value:    value,
 	}
 
-	if !r.Config.EnableSessionCookies && duration != 0 {
+	if !cm.EnableSessionCookies && duration != 0 {
 		cookie.Expires = time.Now().Add(duration)
 	}
 
-	switch r.Config.SameSiteCookie {
+	switch cm.SameSiteCookie {
 	case constant.SameSiteStrict:
 		cookie.SameSite = http.SameSiteStrictMode
 	case constant.SameSiteLax:
@@ -67,24 +88,27 @@ func (r *OauthProxy) DropCookie(wrt http.ResponseWriter, name, value string, dur
 }
 
 // maxCookieChunkSize calculates max cookie chunk size, which can be used for cookie value
-func (r *OauthProxy) GetMaxCookieChunkLength(req *http.Request, cookieName string) int {
+func (cm *Manager) GetMaxCookieChunkLength(
+	req *http.Request,
+	cookieName string,
+) int {
 	maxCookieChunkLength := 4069 - len(cookieName)
 
-	if r.Config.CookieDomain != "" {
-		maxCookieChunkLength -= len(r.Config.CookieDomain)
+	if cm.CookieDomain != "" {
+		maxCookieChunkLength -= len(cm.CookieDomain)
 	} else {
 		maxCookieChunkLength -= len(strings.Split(req.Host, ":")[0])
 	}
 
-	if r.Config.HTTPOnlyCookie {
+	if cm.HTTPOnlyCookie {
 		maxCookieChunkLength -= len("HttpOnly; ")
 	}
 
-	if !r.Config.EnableSessionCookies {
+	if !cm.EnableSessionCookies {
 		maxCookieChunkLength -= len("Expires=Mon, 02 Jan 2006 03:04:05 MST; ")
 	}
 
-	switch r.Config.SameSiteCookie {
+	switch cm.SameSiteCookie {
 	case constant.SameSiteStrict:
 		maxCookieChunkLength -= len("SameSite=Strict ")
 	case constant.SameSiteLax:
@@ -93,7 +117,7 @@ func (r *OauthProxy) GetMaxCookieChunkLength(req *http.Request, cookieName strin
 		maxCookieChunkLength -= len("SameSite=None ")
 	}
 
-	if r.Config.SecureCookie {
+	if cm.SecureCookie {
 		maxCookieChunkLength -= len("Secure")
 	}
 
@@ -101,23 +125,28 @@ func (r *OauthProxy) GetMaxCookieChunkLength(req *http.Request, cookieName strin
 }
 
 // dropCookieWithChunks drops a cookie from the response, taking into account possible chunks
-func (r *OauthProxy) dropCookieWithChunks(req *http.Request, wrt http.ResponseWriter, name, value string, duration time.Duration) {
-	maxCookieChunkLength := r.GetMaxCookieChunkLength(req, name)
+func (cm *Manager) dropCookieWithChunks(
+	req *http.Request,
+	wrt http.ResponseWriter,
+	name,
+	value string,
+	duration time.Duration,
+) {
+	maxCookieChunkLength := cm.GetMaxCookieChunkLength(req, name)
 
 	if len(value) <= maxCookieChunkLength {
-		r.DropCookie(wrt, name, value, duration)
+		cm.DropCookie(wrt, name, value, duration)
 	} else {
 		// write divided cookies because payload is too long for single cookie
-		r.DropCookie(wrt, name, value[0:maxCookieChunkLength], duration)
+		cm.DropCookie(wrt, name, value[0:maxCookieChunkLength], duration)
 
 		for idx := maxCookieChunkLength; idx < len(value); idx += maxCookieChunkLength {
 			end := idx + maxCookieChunkLength
-
 			if end > len(value) {
 				end = len(value)
 			}
 
-			r.DropCookie(
+			cm.DropCookie(
 				wrt,
 				name+"-"+strconv.Itoa(idx/maxCookieChunkLength),
 				value[idx:end],
@@ -128,27 +157,27 @@ func (r *OauthProxy) dropCookieWithChunks(req *http.Request, wrt http.ResponseWr
 }
 
 // dropAccessTokenCookie drops a access token cookie
-func (r *OauthProxy) dropAccessTokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
-	r.dropCookieWithChunks(req, w, r.Config.CookieAccessName, value, duration)
+func (cm *Manager) DropAccessTokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
+	cm.dropCookieWithChunks(req, w, cm.CookieAccessName, value, duration)
 }
 
 // DropRefreshTokenCookie drops a refresh token cookie
-func (r *OauthProxy) DropRefreshTokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
-	r.dropCookieWithChunks(req, w, r.Config.CookieRefreshName, value, duration)
+func (cm *Manager) DropRefreshTokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
+	cm.dropCookieWithChunks(req, w, cm.CookieRefreshName, value, duration)
 }
 
 // dropIdTokenCookie drops a id token cookie
-func (r *OauthProxy) dropIDTokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
-	r.dropCookieWithChunks(req, w, r.Config.CookieIDTokenName, value, duration)
+func (cm *Manager) DropIDTokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
+	cm.dropCookieWithChunks(req, w, cm.CookieIDTokenName, value, duration)
 }
 
 // dropUMATokenCookie drops a uma token cookie
-func (r *OauthProxy) dropUMATokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
-	r.dropCookieWithChunks(req, w, r.Config.CookieUMAName, value, duration)
+func (cm *Manager) DropUMATokenCookie(req *http.Request, w http.ResponseWriter, value string, duration time.Duration) {
+	cm.dropCookieWithChunks(req, w, cm.CookieUMAName, value, duration)
 }
 
 // writeStateParameterCookie sets a state parameter cookie into the response
-func (r *OauthProxy) writeStateParameterCookie(req *http.Request, wrt http.ResponseWriter) string {
+func (cm *Manager) WriteStateParameterCookie(req *http.Request, wrt http.ResponseWriter) string {
 	uuid, err := uuid.NewV4()
 
 	if err != nil {
@@ -157,41 +186,41 @@ func (r *OauthProxy) writeStateParameterCookie(req *http.Request, wrt http.Respo
 
 	requestURI := req.URL.RequestURI()
 
-	if r.Config.NoProxy && !r.Config.NoRedirects {
+	if cm.NoProxy && !cm.NoRedirects {
 		xReqURI := req.Header.Get("X-Forwarded-Uri")
 		requestURI = xReqURI
 	}
 
 	encRequestURI := base64.StdEncoding.EncodeToString([]byte(requestURI))
 
-	r.DropCookie(wrt, r.Config.CookieRequestURIName, encRequestURI, 0)
-	r.DropCookie(wrt, r.Config.CookieOAuthStateName, uuid.String(), 0)
+	cm.DropCookie(wrt, cm.CookieRequestURIName, encRequestURI, 0)
+	cm.DropCookie(wrt, cm.CookieOAuthStateName, uuid.String(), 0)
 
 	return uuid.String()
 }
 
 // writePKCECookie sets a code verifier cookie into the response
-func (r *OauthProxy) writePKCECookie(wrt http.ResponseWriter, codeVerifier string) {
-	r.DropCookie(wrt, r.Config.CookiePKCEName, codeVerifier, 0)
+func (cm *Manager) WritePKCECookie(wrt http.ResponseWriter, codeVerifier string) {
+	cm.DropCookie(wrt, cm.CookiePKCEName, codeVerifier, 0)
 }
 
 // ClearAllCookies is just a helper function for the below
-func (r *OauthProxy) ClearAllCookies(req *http.Request, w http.ResponseWriter) {
-	r.ClearAccessTokenCookie(req, w)
-	r.ClearRefreshTokenCookie(req, w)
-	r.ClearIDTokenCookie(req, w)
-	r.ClearUMATokenCookie(req, w)
+func (cm *Manager) ClearAllCookies(req *http.Request, w http.ResponseWriter) {
+	cm.ClearAccessTokenCookie(req, w)
+	cm.ClearRefreshTokenCookie(req, w)
+	cm.ClearIDTokenCookie(req, w)
+	cm.ClearUMATokenCookie(req, w)
 }
 
-func (r *OauthProxy) ClearCookie(req *http.Request, wrt http.ResponseWriter, name string) {
-	r.DropCookie(wrt, name, "", -10*time.Hour)
+func (cm *Manager) ClearCookie(req *http.Request, wrt http.ResponseWriter, name string) {
+	cm.DropCookie(wrt, name, "", -10*time.Hour)
 
 	// clear divided cookies
 	for idx := 1; idx < 600; idx++ {
 		var _, err = req.Cookie(name + "-" + strconv.Itoa(idx))
 
 		if err == nil {
-			r.DropCookie(
+			cm.DropCookie(
 				wrt,
 				name+"-"+strconv.Itoa(idx),
 				"",
@@ -204,21 +233,21 @@ func (r *OauthProxy) ClearCookie(req *http.Request, wrt http.ResponseWriter, nam
 }
 
 // clearRefreshSessionCookie clears the session cookie
-func (r *OauthProxy) ClearRefreshTokenCookie(req *http.Request, wrt http.ResponseWriter) {
-	r.ClearCookie(req, wrt, r.Config.CookieRefreshName)
+func (cm *Manager) ClearRefreshTokenCookie(req *http.Request, wrt http.ResponseWriter) {
+	cm.ClearCookie(req, wrt, cm.CookieRefreshName)
 }
 
 // ClearAccessTokenCookie clears the session cookie
-func (r *OauthProxy) ClearAccessTokenCookie(req *http.Request, wrt http.ResponseWriter) {
-	r.ClearCookie(req, wrt, r.Config.CookieAccessName)
+func (cm *Manager) ClearAccessTokenCookie(req *http.Request, wrt http.ResponseWriter) {
+	cm.ClearCookie(req, wrt, cm.CookieAccessName)
 }
 
 // ClearIDTokenCookie clears the session cookie
-func (r *OauthProxy) ClearIDTokenCookie(req *http.Request, wrt http.ResponseWriter) {
-	r.ClearCookie(req, wrt, r.Config.CookieIDTokenName)
+func (cm *Manager) ClearIDTokenCookie(req *http.Request, wrt http.ResponseWriter) {
+	cm.ClearCookie(req, wrt, cm.CookieIDTokenName)
 }
 
 // ClearUMATokenCookie clears the session cookie
-func (r *OauthProxy) ClearUMATokenCookie(req *http.Request, wrt http.ResponseWriter) {
-	r.ClearCookie(req, wrt, r.Config.CookieUMAName)
+func (cm *Manager) ClearUMATokenCookie(req *http.Request, wrt http.ResponseWriter) {
+	cm.ClearCookie(req, wrt, cm.CookieUMAName)
 }

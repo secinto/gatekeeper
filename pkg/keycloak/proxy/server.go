@@ -50,6 +50,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/handlers"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
@@ -288,6 +289,24 @@ func (r *OauthProxy) CreateReverseProxy() error {
 
 	engine := chi.NewRouter()
 	r.useDefaultStack(engine)
+
+	r.Cm = &cookie.Manager{
+		CookieDomain:         r.Config.CookieDomain,
+		BaseURI:              r.Config.BaseURI,
+		HTTPOnlyCookie:       r.Config.HTTPOnlyCookie,
+		SecureCookie:         r.Config.SecureCookie,
+		EnableSessionCookies: r.Config.EnableSessionCookies,
+		SameSiteCookie:       r.Config.SameSiteCookie,
+		CookieAccessName:     r.Config.CookieAccessName,
+		CookieRefreshName:    r.Config.CookieRefreshName,
+		CookieIDTokenName:    r.Config.CookieIDTokenName,
+		CookiePKCEName:       r.Config.CookiePKCEName,
+		CookieUMAName:        r.Config.CookieUMAName,
+		CookieRequestURIName: r.Config.CookieRequestURIName,
+		CookieOAuthStateName: r.Config.CookieOAuthStateName,
+		NoProxy:              r.Config.NoProxy,
+		NoRedirects:          r.Config.NoRedirects,
+	}
 
 	r.GetIdentity = GetIdentity(
 		r.Log,

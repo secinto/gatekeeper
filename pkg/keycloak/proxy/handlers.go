@@ -136,7 +136,7 @@ func (r *OauthProxy) oauthAuthorizationHandler(wrt http.ResponseWriter, req *htt
 			oauth2.SetAuthURLParam(pkce.ParamCodeChallenge, codeChallenge),
 			oauth2.SetAuthURLParam(pkce.ParamCodeChallengeMethod, pkce.MethodS256),
 		)
-		r.writePKCECookie(wrt, codeVerifier)
+		r.Cm.WritePKCECookie(wrt, codeVerifier)
 	}
 
 	authURL := conf.AuthCodeURL(
@@ -226,7 +226,7 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 				return
 			}
 		default:
-			r.DropRefreshTokenCookie(req, writer, encrypted, oidcTokensCookiesExp)
+			r.Cm.DropRefreshTokenCookie(req, writer, encrypted, oidcTokensCookiesExp)
 		}
 	}
 
@@ -282,14 +282,14 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 		}
 	}
 
-	r.dropAccessTokenCookie(req, writer, accessToken, oidcTokensCookiesExp)
+	r.Cm.DropAccessTokenCookie(req, writer, accessToken, oidcTokensCookiesExp)
 	if r.Config.EnableIDTokenCookie {
-		r.dropIDTokenCookie(req, writer, identityToken, oidcTokensCookiesExp)
+		r.Cm.DropIDTokenCookie(req, writer, identityToken, oidcTokensCookiesExp)
 	}
 
 	if r.Config.EnableUma && umaError == nil {
 		scope.Logger.Debug("got uma token", zap.String("uma", umaToken))
-		r.dropUMATokenCookie(req, writer, umaToken, oidcTokensCookiesExp)
+		r.Cm.DropUMATokenCookie(req, writer, umaToken, oidcTokensCookiesExp)
 	}
 
 	if umaError != nil {
@@ -415,7 +415,7 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 			}
 
 			// drop in the access token - cookie expiration = access token
-			r.dropAccessTokenCookie(
+			r.Cm.DropAccessTokenCookie(
 				req,
 				writer,
 				accessToken,
@@ -423,7 +423,7 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 			)
 
 			if r.Config.EnableIDTokenCookie {
-				r.dropIDTokenCookie(
+				r.Cm.DropIDTokenCookie(
 					req,
 					writer,
 					idToken,
@@ -458,17 +458,17 @@ func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request)
 					)
 				}
 			default:
-				r.DropRefreshTokenCookie(req, writer, refreshToken, expiration)
+				r.Cm.DropRefreshTokenCookie(req, writer, refreshToken, expiration)
 			}
 		} else {
-			r.dropAccessTokenCookie(
+			r.Cm.DropAccessTokenCookie(
 				req,
 				writer,
 				accessToken,
 				time.Until(identity.ExpiresAt),
 			)
 			if r.Config.EnableIDTokenCookie {
-				r.dropIDTokenCookie(
+				r.Cm.DropIDTokenCookie(
 					req,
 					writer,
 					idToken,
@@ -588,7 +588,7 @@ func (r *OauthProxy) logoutHandler(writer http.ResponseWriter, req *http.Request
 		idToken = user.RawToken
 	}
 
-	r.ClearAllCookies(req, writer)
+	r.Cm.ClearAllCookies(req, writer)
 
 	// @metric increment the logout counter
 	metrics.OauthTokensMetric.WithLabelValues("logout").Inc()

@@ -283,7 +283,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 						switch err {
 						case apperrors.ErrRefreshTokenExpired:
 							lLog.Warn("refresh token has expired, cannot retrieve access token")
-							r.ClearAllCookies(req.WithContext(ctx), wrt)
+							r.Cm.ClearAllCookies(req.WithContext(ctx), wrt)
 						default:
 							lLog.Debug(
 								apperrors.ErrAccTokenRefreshFailure.Error(),
@@ -337,7 +337,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 					}
 
 					// step: inject the refreshed access token
-					r.dropAccessTokenCookie(req.WithContext(ctx), wrt, accessToken, accessExpiresIn)
+					r.Cm.DropAccessTokenCookie(req.WithContext(ctx), wrt, accessToken, accessExpiresIn)
 
 					// step: inject the renewed refresh token
 					if newRefreshToken != "" {
@@ -374,7 +374,7 @@ func (r *OauthProxy) authenticationMiddleware() func(http.Handler) http.Handler 
 								}
 							}(user.RawToken, newRawAccToken, encryptedRefreshToken)
 						} else {
-							r.DropRefreshTokenCookie(req.WithContext(ctx), wrt, encryptedRefreshToken, refreshExpiresIn)
+							r.Cm.DropRefreshTokenCookie(req.WithContext(ctx), wrt, encryptedRefreshToken, refreshExpiresIn)
 						}
 					}
 
@@ -487,7 +487,7 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 						}
 					}
 
-					r.dropUMATokenCookie(req, wrt, umaToken, time.Until(umaUser.ExpiresAt))
+					r.Cm.DropUMATokenCookie(req, wrt, umaToken, time.Until(umaUser.ExpiresAt))
 					wrt.Header().Set(constant.UMAHeader, umaToken)
 					scope.Logger.Debug("got uma token")
 					decision, err = authzFunc(authzPath, umaUser.Permissions)

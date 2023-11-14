@@ -16,6 +16,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"go.uber.org/zap"
 	"gopkg.in/square/go-jose.v2/jwt"
@@ -55,6 +56,7 @@ type OauthProxy struct {
 	accessError      func(wrt http.ResponseWriter, req *http.Request) context.Context
 	customSignInPage func(wrt http.ResponseWriter, authURL string)
 	GetIdentity      func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error)
+	Cm               *cookie.Manager
 }
 
 // TokenResponse
