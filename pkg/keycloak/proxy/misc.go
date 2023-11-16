@@ -164,7 +164,7 @@ func (r *OauthProxy) redirectToAuthorization(wrt http.ResponseWriter, req *http.
 	}
 
 	// step: add a state referrer to the authorization page
-	uuid := r.Cm.WriteStateParameterCookie(req, wrt)
+	uuid := r.Cm.DropStateParameterCookie(req, wrt)
 	authQuery := fmt.Sprintf("?state=%s", uuid)
 
 	// step: if verification is switched off, we can't authorization

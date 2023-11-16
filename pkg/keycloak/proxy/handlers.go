@@ -100,7 +100,6 @@ func (r *OauthProxy) oauthAuthorizationHandler(wrt http.ResponseWriter, req *htt
 	}
 
 	scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
-
 	if !assertOk {
 		r.Log.Error(apperrors.ErrAssertionFailed.Error())
 		return
@@ -122,7 +121,6 @@ func (r *OauthProxy) oauthAuthorizationHandler(wrt http.ResponseWriter, req *htt
 
 	if r.Config.EnablePKCE {
 		codeVerifier, err := pkce.NewCodeVerifierWithLength(96)
-
 		if err != nil {
 			r.Log.Error(
 				apperrors.ErrPKCECodeCreation.Error(),
@@ -136,7 +134,7 @@ func (r *OauthProxy) oauthAuthorizationHandler(wrt http.ResponseWriter, req *htt
 			oauth2.SetAuthURLParam(pkce.ParamCodeChallenge, codeChallenge),
 			oauth2.SetAuthURLParam(pkce.ParamCodeChallengeMethod, pkce.MethodS256),
 		)
-		r.Cm.WritePKCECookie(wrt, codeVerifier)
+		r.Cm.DropPKCECookie(wrt, codeVerifier)
 	}
 
 	authURL := conf.AuthCodeURL(
@@ -237,6 +235,9 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 			redirectURI = r.getRequestURIFromCookie(scope, encodedRequestURI)
 		}
 	}
+
+	r.Cm.ClearStateParameterCookie(req, writer)
+	r.Cm.ClearPKCECookie(req, writer)
 
 	if r.Config.PostLoginRedirectPath != "" && redirectURI == "/" {
 		redirectURI = r.Config.PostLoginRedirectPath

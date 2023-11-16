@@ -71,7 +71,7 @@ func (cm *Manager) DropCookie(
 		Value:    value,
 	}
 
-	if !cm.EnableSessionCookies && duration != 0 {
+	if !cm.EnableSessionCookies && duration != 0 || duration == constant.InvalidCookieDuration {
 		cookie.Expires = time.Now().Add(duration)
 	}
 
@@ -88,6 +88,7 @@ func (cm *Manager) DropCookie(
 }
 
 // maxCookieChunkSize calculates max cookie chunk size, which can be used for cookie value
+// this seems to be not useful as many browsers have limits of all cookies per domain = 4096 bytes
 func (cm *Manager) GetMaxCookieChunkLength(
 	req *http.Request,
 	cookieName string,
@@ -176,8 +177,8 @@ func (cm *Manager) DropUMATokenCookie(req *http.Request, w http.ResponseWriter, 
 	cm.dropCookieWithChunks(req, w, cm.CookieUMAName, value, duration)
 }
 
-// writeStateParameterCookie sets a state parameter cookie into the response
-func (cm *Manager) WriteStateParameterCookie(req *http.Request, wrt http.ResponseWriter) string {
+// DropStateParameterCookie sets a state parameter cookie into the response
+func (cm *Manager) DropStateParameterCookie(req *http.Request, wrt http.ResponseWriter) string {
 	uuid, err := uuid.NewV4()
 
 	if err != nil {
@@ -199,8 +200,8 @@ func (cm *Manager) WriteStateParameterCookie(req *http.Request, wrt http.Respons
 	return uuid.String()
 }
 
-// writePKCECookie sets a code verifier cookie into the response
-func (cm *Manager) WritePKCECookie(wrt http.ResponseWriter, codeVerifier string) {
+// DropPKCECookie sets a code verifier cookie into the response
+func (cm *Manager) DropPKCECookie(wrt http.ResponseWriter, codeVerifier string) {
 	cm.DropCookie(wrt, cm.CookiePKCEName, codeVerifier, 0)
 }
 
@@ -210,10 +211,11 @@ func (cm *Manager) ClearAllCookies(req *http.Request, w http.ResponseWriter) {
 	cm.ClearRefreshTokenCookie(req, w)
 	cm.ClearIDTokenCookie(req, w)
 	cm.ClearUMATokenCookie(req, w)
+	cm.ClearStateParameterCookie(req, w)
 }
 
 func (cm *Manager) ClearCookie(req *http.Request, wrt http.ResponseWriter, name string) {
-	cm.DropCookie(wrt, name, "", -10*time.Hour)
+	cm.DropCookie(wrt, name, "", constant.InvalidCookieDuration)
 
 	// clear divided cookies
 	for idx := 1; idx < 600; idx++ {
@@ -224,7 +226,7 @@ func (cm *Manager) ClearCookie(req *http.Request, wrt http.ResponseWriter, name 
 				wrt,
 				name+"-"+strconv.Itoa(idx),
 				"",
-				-10*time.Hour,
+				constant.InvalidCookieDuration,
 			)
 		} else {
 			break
@@ -250,4 +252,15 @@ func (cm *Manager) ClearIDTokenCookie(req *http.Request, wrt http.ResponseWriter
 // ClearUMATokenCookie clears the session cookie
 func (cm *Manager) ClearUMATokenCookie(req *http.Request, wrt http.ResponseWriter) {
 	cm.ClearCookie(req, wrt, cm.CookieUMAName)
+}
+
+// ClearPKCECookie clears the session cookie
+func (cm *Manager) ClearPKCECookie(req *http.Request, wrt http.ResponseWriter) {
+	cm.ClearCookie(req, wrt, cm.CookiePKCEName)
+}
+
+// ClearStateParameterCookie clears the session cookie
+func (cm *Manager) ClearStateParameterCookie(req *http.Request, wrt http.ResponseWriter) {
+	cm.ClearCookie(req, wrt, cm.CookieRequestURIName)
+	cm.ClearCookie(req, wrt, cm.CookieOAuthStateName)
 }

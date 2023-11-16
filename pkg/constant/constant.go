@@ -1,5 +1,7 @@
 package constant
 
+import "time"
+
 type contextKey int8
 
 const (
@@ -65,4 +67,6 @@ const (
 	IdpRevokeURI      = "/protocol/openid-connect/revoke"
 	IdpResourceSetURI = "/authz/protection/resource_set"
 	IdpProtectPermURI = "/authz/protection/permission"
+
+	InvalidCookieDuration = -10 * time.Hour
 )
