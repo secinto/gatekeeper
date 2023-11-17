@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
@@ -37,7 +38,6 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/square/go-jose.v2/jwt"
 )
 
 func TestNewKeycloakProxy(t *testing.T) {

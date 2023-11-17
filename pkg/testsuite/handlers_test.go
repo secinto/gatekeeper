@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -32,7 +33,6 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/square/go-jose.v2/jwt"
 )
 
 func TestDebugHandler(t *testing.T) {

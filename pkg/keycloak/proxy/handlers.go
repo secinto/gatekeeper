@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -38,7 +39,6 @@ import (
 	"github.com/grokify/go-pkce"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
-	"gopkg.in/square/go-jose.v2/jwt"
 )
 
 type DiscoveryResponse struct {

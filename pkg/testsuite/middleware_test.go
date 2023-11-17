@@ -44,7 +44,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 
-	"gopkg.in/square/go-jose.v2/jwt"
+	"github.com/go-jose/go-jose/v3/jwt"
 
 	opaserver "github.com/open-policy-agent/opa/server"
 )

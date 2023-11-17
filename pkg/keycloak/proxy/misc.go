@@ -29,6 +29,7 @@ import (
 
 	"github.com/Nerzal/gocloak/v12"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
+	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
@@ -36,7 +37,6 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
-	"gopkg.in/square/go-jose.v2/jwt"
 )
 
 // filterCookies is responsible for censoring any cookies we don't want sent

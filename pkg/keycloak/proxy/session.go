@@ -19,11 +19,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
-	"gopkg.in/square/go-jose.v2/jwt"
 )
 
 // GetIdentity retrieves the user identity from a request, either from a session cookie or a bearer token

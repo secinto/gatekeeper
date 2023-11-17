@@ -11,6 +11,7 @@ require (
 	github.com/elazarl/goproxy v0.0.0-20230808193330-2592e75ae04a
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/go-chi/chi/v5 v5.0.4
+	github.com/go-jose/go-jose/v3 v3.0.1
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/gofrs/uuid v4.0.0+incompatible
 	github.com/grokify/go-pkce v0.2.0
@@ -30,7 +31,6 @@ require (
 	golang.org/x/crypto v0.14.0
 	golang.org/x/net v0.17.0
 	golang.org/x/oauth2 v0.12.0
-	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -102,6 +102,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231016165738-49dd2c1f3d0b // indirect
 	google.golang.org/grpc v1.59.0 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
+	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	oras.land/oras-go/v2 v2.3.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect

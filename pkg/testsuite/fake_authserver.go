@@ -17,14 +17,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	jose2 "github.com/go-jose/go-jose/v3"
+	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
 	"github.com/grokify/go-pkce"
 	"github.com/jochasinga/relay"
-	jose2 "gopkg.in/square/go-jose.v2"
-	"gopkg.in/square/go-jose.v2/jwt"
 )
 
 type RoleClaim struct {
