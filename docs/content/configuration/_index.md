@@ -79,6 +79,7 @@ weight: 2
 |    --secure-cookie                         | enforces the cookie to be secure | true | PROXY_SECURE_COOKIE
 |    --http-only-cookie                      | enforces the cookie is in http only mode | true | PROXY_HTTP_ONLY_COOKIE
 |    --same-site-cookie value                | enforces cookies to be send only to same site requests according to the policy (can be \| Strict\|Lax\|None) | Lax | PROXY_SAME_SITE_COOKIE
+|    --enable-id-token-cookie                | enable id token cookie | false | PROXY_ENABLE_IDTOKEN_COOKIE
 |    --match-claims value                    | keypair values for matching access token claims e.g. aud=myapp, iss=http://example.* | |
 |    --add-claims value                      | extra claims from the token and inject into headers, e.g given_name -> X-Auth-Given-Name | |
 |    --enable-uma-method-scope               | enables passing request method as 'method:GET' scope to keycloak for authorization | false | PROXY_ENABLE_UMA_METHOD_SCOPE
@@ -102,6 +103,7 @@ weight: 2
 |    --hostnames value                       | list of hostnames the service will respond to | |
 |    --store-url value                       | url for the storage subsystem, e.g redis://user:secret@localhost:6379/0?protocol=3, only supported is redis usig redis uri spec | | PROXY_STORE_URL
 |    --encryption-key value                  | encryption key used to encryption the session state | | PROXY_ENCRYPTION_KEY
+|	 --enable-hmac                           | enable creating hmac for forwarded requests and verification on incoming requests | false | PROXY_ENABLE_HMAC
 |    --no-proxy value                        | do not proxy requests to upstream, useful for forward-auth usage (with nginx, traefik) | | PROXY_NO_PROXY
 |    --no-redirects                          | do not have back redirects when no authentication is present, 401 them | false | PROXY_NO_REDIRECTS
 |    --skip-token-verification               | TESTING ONLY; bypass token verification, only expiration and roles enforced | false | PROXY_SKIP_TOKEN_VERIFICATION

@@ -255,6 +255,17 @@ The HTTP routing rules follow the guidelines from
 [chi](https://github.com/go-chi/chi#router-design). The ordering of the
 resources does not matter, the router will handle that for you.
 
+## Cookies size
+
+All browsers have limitations on cookies number and cookie size. This usually does not adhere
+to any standard. E.g. Chrome has limitation of 4096 bytes on all cookies per domain.
+This might cause you troubles e.g. Chrome responding with 431 Request Header Fields are Too Large.
+To overcome this limitations gatekeeper offers several options:
+
+`--enable-id-token-cookie` - is set by default false, in case you don't need id token, leave it/turn it off
+`--store-url` - this will enable storing of refresh token in redis store, instead of cookies, which saves you some bytes,
+also has some additional effect of raising security on client side as refresh token won't be exposed on client side
+
 ## Session-only cookies
 
 By default, the access and refresh cookies are session-only and disposed
@@ -372,7 +383,7 @@ in Keycloak, providing granular role controls over issue tokens.
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:2.8.0
+  image: quay.io/gogatekeeper/gatekeeper:2.9.0
   args:
   - --enable-forwarding=true
   - --forwarding-username=projecta
@@ -399,7 +410,7 @@ Example setup client credentials grant:
 
 ``` yaml
 - name: gatekeeper
-  image: quay.io/gogatekeeper/gatekeeper:2.8.0
+  image: quay.io/gogatekeeper/gatekeeper:2.9.0
   args:
   - --enable-forwarding=true
   - --forwarding-domains=projecta.svc.cluster.local
