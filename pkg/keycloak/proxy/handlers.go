@@ -295,7 +295,15 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 		// could try to get new uma token/cookie, e.g in case he tried first to access
 		// resource to which he doesn't have access
 
-		token, erru := r.getRPT(req, redirectURI, accessToken, methodScope)
+		token, erru := getRPT(
+			req.Context(),
+			r.pat,
+			r.IdpClient,
+			r.Config.Realm,
+			redirectURI,
+			accessToken,
+			methodScope,
+		)
 		umaError = erru
 		if token != nil {
 			umaToken = token.AccessToken

@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -477,12 +478,36 @@ func authenticationMiddleware(
 	authorizationMiddleware is responsible for verifying permissions in access_token/uma_token
 */
 //nolint:cyclop
-func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
+func authorizationMiddleware(
+	logger *zap.Logger,
+	enableUma bool,
+	enableUmaMethodScope bool,
+	cookieUMAName string,
+	noProxy bool,
+	pat *PAT,
+	oidcProvider *oidc3.Provider,
+	idpClient *gocloak.GoCloak,
+	openIDProviderTimeout time.Duration,
+	realm string,
+	enableEncryptedToken bool,
+	forceEncryptedCookie bool,
+	encryptionKey string,
+	cookManager *cookie.Manager,
+	enableOpa bool,
+	opaTimeout time.Duration,
+	opaAuthzURL *url.URL,
+	discoveryURI *url.URL,
+	clientID string,
+	skipClientIDCheck bool,
+	skipIssuerCheck bool,
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
 			if !assertOk {
-				r.Log.Error(apperrors.ErrAssertionFailed.Error())
+				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
 			}
 
@@ -500,16 +525,16 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 
 			scope.Logger.Debug("query external authz provider for authz")
 
-			if r.Config.EnableUma {
+			if enableUma {
 				var methodScope *string
-				if r.Config.EnableUmaMethodScope {
+				if enableUmaMethodScope {
 					methSc := "method:" + req.Method
-					if r.Config.NoProxy {
+					if noProxy {
 						xForwardedMethod := req.Header.Get("X-Forwarded-Method")
 						if xForwardedMethod == "" {
 							scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
 							//nolint:contextcheck
-							next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+							next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 							return
 						}
 						methSc = "method:" + xForwardedMethod
@@ -518,12 +543,12 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 				}
 
 				authzPath := req.URL.Path
-				if r.Config.NoProxy {
+				if noProxy {
 					authzPath = req.Header.Get("X-Forwarded-URI")
 					if authzPath == "" {
 						scope.Logger.Error(apperrors.ErrForwardAuthMissingHeaders.Error())
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 						return
 					}
 				}
@@ -532,49 +557,68 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					targetPath string,
 					userPerms authorization.Permissions,
 				) (authorization.AuthzDecision, error) {
-					r.pat.m.RLock()
-					token := r.pat.Token.AccessToken
-					r.pat.m.RUnlock()
+					pat.m.RLock()
+					token := pat.Token.AccessToken
+					pat.m.RUnlock()
 					provider = authorization.NewKeycloakAuthorizationProvider(
 						userPerms,
 						targetPath,
-						r.IdpClient,
-						r.Config.OpenIDProviderTimeout,
+						idpClient,
+						openIDProviderTimeout,
 						token,
-						r.Config.Realm,
+						realm,
 						methodScope,
 					)
 					return provider.Authorize()
 				}
 
-				decision, err = r.WithUMAIdentity(req, authzPath, user, authzFunc)
+				decision, err = WithUMAIdentity(
+					req,
+					authzPath,
+					user,
+					cookieUMAName,
+					oidcProvider,
+					clientID,
+					skipClientIDCheck,
+					skipIssuerCheck,
+					getIdentity,
+					authzFunc,
+				)
 				if err != nil {
 					var umaUser *UserContext
 					scope.Logger.Error(err.Error())
 					scope.Logger.Info("trying to get new uma token")
 
-					umaUser, err = r.refreshUmaToken(req, authzPath, user, methodScope)
+					umaUser, err = refreshUmaToken(
+						req.Context(),
+						pat,
+						idpClient,
+						realm,
+						authzPath,
+						user,
+						methodScope,
+					)
 					if err == nil {
 						umaToken := umaUser.RawToken
-						if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
-							if umaToken, err = encryption.EncodeText(umaToken, r.Config.EncryptionKey); err != nil {
+						if enableEncryptedToken || forceEncryptedCookie {
+							if umaToken, err = encryption.EncodeText(umaToken, encryptionKey); err != nil {
 								scope.Logger.Error(err.Error())
 								//nolint:contextcheck
-								next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+								next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 								return
 							}
 						}
 
-						r.Cm.DropUMATokenCookie(req, wrt, umaToken, time.Until(umaUser.ExpiresAt))
+						cookManager.DropUMATokenCookie(req, wrt, umaToken, time.Until(umaUser.ExpiresAt))
 						wrt.Header().Set(constant.UMAHeader, umaToken)
 						scope.Logger.Debug("got uma token")
 						decision, err = authzFunc(authzPath, umaUser.Permissions)
 					}
 				}
-			} else if r.Config.EnableOpa {
+			} else if enableOpa {
 				provider = authorization.NewOpaAuthorizationProvider(
-					r.Config.OpaTimeout,
-					*r.Config.OpaAuthzURL,
+					opaTimeout,
+					*opaAuthzURL,
 					req,
 				)
 				decision, err = provider.Authorize()
@@ -601,12 +645,12 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 			scope.Logger.Info("authz decision", zap.String("decision", decision.String()))
 
 			if decision == authorization.DeniedAuthz {
-				if r.Config.EnableUma {
+				if enableUma {
 					prv, ok := provider.(*authorization.KeycloakAuthorizationProvider)
 					if !ok {
 						scope.Logger.Error(apperrors.ErrAssertionFailed.Error())
 						//nolint:contextcheck
-						next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+						next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 						return
 					}
 
@@ -617,15 +661,15 @@ func (r *OauthProxy) authorizationMiddleware() func(http.Handler) http.Handler {
 					} else {
 						permHeader := fmt.Sprintf(
 							`realm="%s", as_uri="%s", ticket="%s"`,
-							r.Config.Realm,
-							r.Config.DiscoveryURI.Host,
+							realm,
+							discoveryURI.Host,
 							ticket,
 						)
 						wrt.Header().Add(constant.UMATicketHeader, permHeader)
 					}
 				}
 				//nolint:contextcheck
-				next.ServeHTTP(wrt, req.WithContext(r.accessForbidden(wrt, req)))
+				next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 				return
 			}
 

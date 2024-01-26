@@ -385,19 +385,41 @@ func (r *OauthProxy) getPAT(done chan bool) {
 	}
 }
 
-func (r *OauthProxy) WithUMAIdentity(
+func WithUMAIdentity(
 	req *http.Request,
 	targetPath string,
 	user *UserContext,
+	cookieUMAName string,
+	provider *oidc3.Provider,
+	clientID string,
+	skipClientIDCheck bool,
+	skipIssuerCheck bool,
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
 	authzFunc func(targetPath string, userPerms authorization.Permissions) (authorization.AuthzDecision, error),
 ) (authorization.AuthzDecision, error) {
-	umaUser, err := r.GetIdentity(req, r.Config.CookieUMAName, constant.UMAHeader)
+	umaUser, err := getIdentity(req, cookieUMAName, constant.UMAHeader)
 	if err != nil {
 		return authorization.DeniedAuthz, err
 	}
 
-	err = r.verifyUmaToken(user, umaUser, req)
+	// make sure somebody doesn't sent one user access token
+	// and others user valid uma token in one request
+	if umaUser.ID != user.ID {
+		return authorization.DeniedAuthz, apperrors.ErrAccessMismatchUmaToken
+	}
+
+	_, err = verifyToken(
+		req.Context(),
+		provider,
+		umaUser.RawToken,
+		clientID,
+		skipClientIDCheck,
+		skipIssuerCheck,
+	)
 	if err != nil {
+		if strings.Contains(err.Error(), "token is expired") {
+			return authorization.DeniedAuthz, apperrors.ErrUMATokenExpired
+		}
 		return authorization.DeniedAuthz, err
 	}
 
@@ -405,18 +427,15 @@ func (r *OauthProxy) WithUMAIdentity(
 }
 
 // getRPT retrieves relaying party token
-func (r *OauthProxy) getRPT(
-	req *http.Request,
+func getRPT(
+	ctx context.Context,
+	pat *PAT,
+	idpClient *gocloak.GoCloak,
+	realm string,
 	targetPath string,
 	userToken string,
 	methodScope *string,
 ) (*gocloak.JWT, error) {
-	ctx, cancel := context.WithTimeout(
-		req.Context(),
-		r.Config.OpenIDProviderTimeout,
-	)
-	defer cancel()
-
 	matchingURI := true
 	resourceParam := gocloak.GetResourceParams{
 		URI:         &targetPath,
@@ -424,14 +443,14 @@ func (r *OauthProxy) getRPT(
 		Scope:       methodScope,
 	}
 
-	r.pat.m.RLock()
-	pat := r.pat.Token.AccessToken
-	r.pat.m.RUnlock()
+	pat.m.RLock()
+	patTok := pat.Token.AccessToken
+	pat.m.RUnlock()
 
-	resources, err := r.IdpClient.GetResourcesClient(
+	resources, err := idpClient.GetResourcesClient(
 		ctx,
-		pat,
-		r.Config.Realm,
+		patTok,
+		realm,
 		resourceParam,
 	)
 	if err != nil {
@@ -474,10 +493,10 @@ func (r *OauthProxy) getRPT(
 		},
 	}
 
-	permTicket, err := r.IdpClient.CreatePermissionTicket(
+	permTicket, err := idpClient.CreatePermissionTicket(
 		ctx,
-		pat,
-		r.Config.Realm,
+		patTok,
+		realm,
 		permissions,
 	)
 	if err != nil {
@@ -497,10 +516,10 @@ func (r *OauthProxy) getRPT(
 	}
 
 	if userToken == "" {
-		userToken = pat
+		userToken = patTok
 	}
 
-	rpt, err := r.IdpClient.GetRequestingPartyToken(ctx, userToken, r.Config.Realm, rptOptions)
+	rpt, err := idpClient.GetRequestingPartyToken(ctx, userToken, realm, rptOptions)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"%s resource: %s %w",
@@ -563,39 +582,7 @@ func (r *OauthProxy) getCodeFlowTokens(
 	return resp.AccessToken, idToken, resp.RefreshToken, nil
 }
 
-func (r *OauthProxy) verifyUmaToken(
-	accessUserCtx *UserContext,
-	umaUserCtx *UserContext,
-	req *http.Request,
-) error {
-	// make sure somebody doesn't sent one user access token
-	// and others user valid uma token in one request
-	if umaUserCtx.ID != accessUserCtx.ID {
-		return apperrors.ErrAccessMismatchUmaToken
-	}
-
-	verifier := r.Provider.Verifier(
-		&oidc3.Config{
-			ClientID:          r.Config.ClientID,
-			SkipClientIDCheck: r.Config.SkipAccessTokenClientIDCheck,
-			SkipIssuerCheck:   r.Config.SkipAccessTokenIssuerCheck,
-		},
-	)
-
-	ctx, cancel := context.WithTimeout(req.Context(), r.Config.OpenIDProviderTimeout)
-	defer cancel()
-
-	_, err := verifier.Verify(ctx, umaUserCtx.RawToken)
-	if err != nil {
-		if strings.Contains(err.Error(), "token is expired") {
-			return apperrors.ErrUMATokenExpired
-		}
-		return fmt.Errorf("%s %w", apperrors.ErrTokenVerificationFailure.Error(), err)
-	}
-
-	return nil
-}
-
+// verifyOIDCTokens
 func verifyOIDCTokens(
 	ctx context.Context,
 	provider *oidc3.Provider,
@@ -730,13 +717,24 @@ func (r *OauthProxy) getRequestURIFromCookie(
 	return string(decoded)
 }
 
-func (r *OauthProxy) refreshUmaToken(
-	req *http.Request,
+func refreshUmaToken(
+	ctx context.Context,
+	pat *PAT,
+	idpClient *gocloak.GoCloak,
+	realm string,
 	targetPath string,
 	user *UserContext,
 	methodScope *string,
 ) (*UserContext, error) {
-	tok, err := r.getRPT(req, targetPath, user.RawToken, methodScope)
+	tok, err := getRPT(
+		ctx,
+		pat,
+		idpClient,
+		realm,
+		targetPath,
+		user.RawToken,
+		methodScope,
+	)
 	if err != nil {
 		return nil, err
 	}
