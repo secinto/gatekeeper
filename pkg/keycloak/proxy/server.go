@@ -424,6 +424,23 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.AccessTokenDuration,
 	)
 
+	loginHand := loginHandler(
+		r.Log,
+		r.Config.OpenIDProviderTimeout,
+		r.IdpClient,
+		r.Config.EnableLoginHandler,
+		r.newOAuth2Config,
+		r.getRedirectionURL,
+		r.Config.EnableEncryptedToken,
+		r.Config.ForceEncryptedCookie,
+		r.Config.EncryptionKey,
+		r.Config.EnableRefreshTokens,
+		r.Config.EnableIDTokenCookie,
+		r.Cm,
+		r.Config.AccessTokenDuration,
+		r.Store,
+	)
+
 	// step: add the routing for oauth
 	engine.With(proxyDenyMiddleware(r.Log)).Route(r.Config.BaseURI+r.Config.OAuthURI, func(eng chi.Router) {
 		eng.MethodNotAllowed(handlers.MethodNotAllowHandlder)
@@ -435,7 +452,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			constant.TokenURL,
 			tokenHandler(r.GetIdentity, r.Config.CookieAccessName, r.accessError),
 		)
-		eng.Post(constant.LoginURL, r.loginHandler)
+		eng.Post(constant.LoginURL, loginHand)
 		eng.Get(constant.DiscoveryURL, discoveryHandler(r.Log, r.WithOAuthURI))
 
 		if r.Config.ListenAdmin == "" {

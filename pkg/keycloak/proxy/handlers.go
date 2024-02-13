@@ -29,10 +29,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Nerzal/gocloak/v12"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
@@ -353,225 +355,242 @@ func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.
 /*
 	loginHandler provide's a generic endpoint for clients to perform a user_credentials login to the provider
 */
-//nolint:cyclop // refactor
-func (r *OauthProxy) loginHandler(writer http.ResponseWriter, req *http.Request) {
-	scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+//nolint:cyclop, funlen // refactor
+func loginHandler(
+	logger *zap.Logger,
+	openIDProviderTimeout time.Duration,
+	idpClient *gocloak.GoCloak,
+	enableLoginHandler bool,
+	newOAuth2Config func(redirectionURL string) *oauth2.Config,
+	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
+	enableEncryptedToken bool,
+	forceEncryptedCookie bool,
+	encryptionKey string,
+	enableRefreshTokens bool,
+	enableIDTokenCookie bool,
+	cookManager *cookie.Manager,
+	accessTokenDuration time.Duration,
+	store storage.Storage,
+) func(wrt http.ResponseWriter, req *http.Request) {
+	return func(writer http.ResponseWriter, req *http.Request) {
+		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
 
-	if !assertOk {
-		r.Log.Error(apperrors.ErrAssertionFailed.Error())
-		writer.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	code, err := func() (int, error) {
-		ctx, cancel := context.WithTimeout(
-			req.Context(),
-			r.Config.OpenIDProviderTimeout,
-		)
-		defer cancel()
-
-		ctx = context.WithValue(
-			ctx,
-			oauth2.HTTPClient,
-			r.IdpClient.RestyClient().GetClient(),
-		)
-
-		if !r.Config.EnableLoginHandler {
-			return http.StatusNotImplemented,
-				apperrors.ErrLoginWithLoginHandleDisabled
-		}
-
-		username := req.PostFormValue("username")
-		password := req.PostFormValue("password")
-
-		if username == "" || password == "" {
-			return http.StatusBadRequest,
-				apperrors.ErrMissingLoginCreds
-		}
-
-		conf := r.newOAuth2Config(r.getRedirectionURL(writer, req))
-
-		start := time.Now()
-		token, err := conf.PasswordCredentialsToken(ctx, username, password)
-		if err != nil {
-			if !token.Valid() {
-				return http.StatusUnauthorized,
-					errors.Join(apperrors.ErrInvalidUserCreds, err)
-			}
-
-			return http.StatusInternalServerError,
-				errors.Join(apperrors.ErrAcquireTokenViaPassCredsGrant, err)
-		}
-
-		// @metric observe the time taken for a login request
-		metrics.OauthLatencyMetric.WithLabelValues("login").Observe(time.Since(start).Seconds())
-
-		accessToken := token.AccessToken
-		refreshToken := ""
-		accessTokenObj, err := jwt.ParseSigned(token.AccessToken)
-		if err != nil {
-			return http.StatusNotImplemented,
-				errors.Join(apperrors.ErrParseAccessToken, err)
-		}
-
-		identity, err := ExtractIdentity(accessTokenObj)
-		if err != nil {
-			return http.StatusNotImplemented,
-				errors.Join(apperrors.ErrExtractIdentityFromAccessToken, err)
-		}
-
-		writer.Header().Set("Content-Type", "application/json")
-		idToken, assertOk := token.Extra("id_token").(string)
 		if !assertOk {
-			return http.StatusInternalServerError,
-				apperrors.ErrResponseMissingIDToken
+			logger.Error(apperrors.ErrAssertionFailed.Error())
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 
-		expiresIn, assertOk := token.Extra("expires_in").(float64)
-		if !assertOk {
-			return http.StatusInternalServerError,
-				apperrors.ErrResponseMissingExpires
-		}
+		code, err := func() (int, error) {
+			ctx, cancel := context.WithTimeout(
+				req.Context(),
+				openIDProviderTimeout,
+			)
+			defer cancel()
 
-		// step: are we encrypting the access token?
-		plainIDToken := idToken
-
-		if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
-			if accessToken, err = encryption.EncodeText(accessToken, r.Config.EncryptionKey); err != nil {
-				scope.Logger.Error(apperrors.ErrEncryptAccToken.Error(), zap.Error(err))
-				return http.StatusInternalServerError,
-					errors.Join(apperrors.ErrEncryptAccToken, err)
-			}
-
-			if idToken, err = encryption.EncodeText(idToken, r.Config.EncryptionKey); err != nil {
-				scope.Logger.Error(apperrors.ErrEncryptIDToken.Error(), zap.Error(err))
-				return http.StatusInternalServerError,
-					errors.Join(apperrors.ErrEncryptIDToken, err)
-			}
-		}
-
-		// step: does the response have a refresh token and we do NOT ignore refresh tokens?
-		if r.Config.EnableRefreshTokens && token.RefreshToken != "" {
-			refreshToken, err = encryption.EncodeText(token.RefreshToken, r.Config.EncryptionKey)
-			if err != nil {
-				scope.Logger.Error(apperrors.ErrEncryptRefreshToken.Error(), zap.Error(err))
-				return http.StatusInternalServerError,
-					errors.Join(apperrors.ErrEncryptRefreshToken, err)
-			}
-
-			// drop in the access token - cookie expiration = access token
-			r.Cm.DropAccessTokenCookie(
-				req,
-				writer,
-				accessToken,
-				GetAccessCookieExpiration(scope.Logger, r.Config.AccessTokenDuration, token.RefreshToken),
+			ctx = context.WithValue(
+				ctx,
+				oauth2.HTTPClient,
+				idpClient.RestyClient().GetClient(),
 			)
 
-			if r.Config.EnableIDTokenCookie {
-				r.Cm.DropIDTokenCookie(
-					req,
-					writer,
-					idToken,
-					GetAccessCookieExpiration(scope.Logger, r.Config.AccessTokenDuration, token.RefreshToken),
-				)
+			if !enableLoginHandler {
+				return http.StatusNotImplemented,
+					apperrors.ErrLoginWithLoginHandleDisabled
 			}
 
-			var expiration time.Duration
-			// notes: not all idp refresh tokens are readable, google for example, so we attempt to decode into
-			// a jwt and if possible extract the expiration, else we default to 10 days
-			refreshTokenObj, errRef := jwt.ParseSigned(token.RefreshToken)
-			if errRef != nil {
-				return http.StatusInternalServerError,
-					errors.Join(apperrors.ErrParseRefreshToken, err)
+			username := req.PostFormValue("username")
+			password := req.PostFormValue("password")
+
+			if username == "" || password == "" {
+				return http.StatusBadRequest,
+					apperrors.ErrMissingLoginCreds
 			}
 
-			stdRefreshClaims := &jwt.Claims{}
+			conf := newOAuth2Config(getRedirectionURL(writer, req))
 
-			err = refreshTokenObj.UnsafeClaimsWithoutVerification(stdRefreshClaims)
+			start := time.Now()
+			token, err := conf.PasswordCredentialsToken(ctx, username, password)
 			if err != nil {
-				expiration = 0
-			} else {
-				expiration = time.Until(stdRefreshClaims.Expiry.Time())
-			}
-
-			switch r.Store != nil {
-			case true:
-				if err = r.Store.Set(req.Context(), utils.GetHashKey(token.AccessToken), refreshToken, expiration); err != nil {
-					scope.Logger.Error(
-						apperrors.ErrSaveTokToStore.Error(),
-						zap.Error(err),
-					)
+				if !token.Valid() {
+					return http.StatusUnauthorized,
+						errors.Join(apperrors.ErrInvalidUserCreds, err)
 				}
-			default:
-				r.Cm.DropRefreshTokenCookie(req, writer, refreshToken, expiration)
-			}
-		} else {
-			r.Cm.DropAccessTokenCookie(
-				req,
-				writer,
-				accessToken,
-				time.Until(identity.ExpiresAt),
-			)
-			if r.Config.EnableIDTokenCookie {
-				r.Cm.DropIDTokenCookie(
-					req,
-					writer,
-					idToken,
-					time.Until(identity.ExpiresAt),
-				)
-			}
-		}
 
-		// @metric a token has been issued
-		metrics.OauthTokensMetric.WithLabelValues("login").Inc()
-		tokenScope := token.Extra("scope")
-		var tScope string
+				return http.StatusInternalServerError,
+					errors.Join(apperrors.ErrAcquireTokenViaPassCredsGrant, err)
+			}
 
-		if tokenScope != nil {
-			tScope, assertOk = tokenScope.(string)
+			// @metric observe the time taken for a login request
+			metrics.OauthLatencyMetric.WithLabelValues("login").Observe(time.Since(start).Seconds())
+
+			accessToken := token.AccessToken
+			refreshToken := ""
+			accessTokenObj, err := jwt.ParseSigned(token.AccessToken)
+			if err != nil {
+				return http.StatusNotImplemented,
+					errors.Join(apperrors.ErrParseAccessToken, err)
+			}
+
+			identity, err := ExtractIdentity(accessTokenObj)
+			if err != nil {
+				return http.StatusNotImplemented,
+					errors.Join(apperrors.ErrExtractIdentityFromAccessToken, err)
+			}
+
+			writer.Header().Set("Content-Type", "application/json")
+			idToken, assertOk := token.Extra("id_token").(string)
 			if !assertOk {
 				return http.StatusInternalServerError,
-					apperrors.ErrAssertionFailed
+					apperrors.ErrResponseMissingIDToken
 			}
-		}
 
-		var resp TokenResponse
-
-		if r.Config.EnableEncryptedToken {
-			resp = TokenResponse{
-				IDToken:      idToken,
-				AccessToken:  accessToken,
-				RefreshToken: refreshToken,
-				ExpiresIn:    expiresIn,
-				Scope:        tScope,
-				TokenType:    token.TokenType,
+			expiresIn, assertOk := token.Extra("expires_in").(float64)
+			if !assertOk {
+				return http.StatusInternalServerError,
+					apperrors.ErrResponseMissingExpires
 			}
-		} else {
-			resp = TokenResponse{
-				IDToken:      plainIDToken,
-				AccessToken:  token.AccessToken,
-				RefreshToken: refreshToken,
-				ExpiresIn:    expiresIn,
-				Scope:        tScope,
-				TokenType:    token.TokenType,
-			}
-		}
 
-		err = json.NewEncoder(writer).Encode(resp)
+			// step: are we encrypting the access token?
+			plainIDToken := idToken
+
+			if enableEncryptedToken || forceEncryptedCookie {
+				if accessToken, err = encryption.EncodeText(accessToken, encryptionKey); err != nil {
+					scope.Logger.Error(apperrors.ErrEncryptAccToken.Error(), zap.Error(err))
+					return http.StatusInternalServerError,
+						errors.Join(apperrors.ErrEncryptAccToken, err)
+				}
+
+				if idToken, err = encryption.EncodeText(idToken, encryptionKey); err != nil {
+					scope.Logger.Error(apperrors.ErrEncryptIDToken.Error(), zap.Error(err))
+					return http.StatusInternalServerError,
+						errors.Join(apperrors.ErrEncryptIDToken, err)
+				}
+			}
+
+			// step: does the response have a refresh token and we do NOT ignore refresh tokens?
+			if enableRefreshTokens && token.RefreshToken != "" {
+				refreshToken, err = encryption.EncodeText(token.RefreshToken, encryptionKey)
+				if err != nil {
+					scope.Logger.Error(apperrors.ErrEncryptRefreshToken.Error(), zap.Error(err))
+					return http.StatusInternalServerError,
+						errors.Join(apperrors.ErrEncryptRefreshToken, err)
+				}
+
+				// drop in the access token - cookie expiration = access token
+				cookManager.DropAccessTokenCookie(
+					req,
+					writer,
+					accessToken,
+					GetAccessCookieExpiration(scope.Logger, accessTokenDuration, token.RefreshToken),
+				)
+
+				if enableIDTokenCookie {
+					cookManager.DropIDTokenCookie(
+						req,
+						writer,
+						idToken,
+						GetAccessCookieExpiration(scope.Logger, accessTokenDuration, token.RefreshToken),
+					)
+				}
+
+				var expiration time.Duration
+				// notes: not all idp refresh tokens are readable, google for example, so we attempt to decode into
+				// a jwt and if possible extract the expiration, else we default to 10 days
+				refreshTokenObj, errRef := jwt.ParseSigned(token.RefreshToken)
+				if errRef != nil {
+					return http.StatusInternalServerError,
+						errors.Join(apperrors.ErrParseRefreshToken, err)
+				}
+
+				stdRefreshClaims := &jwt.Claims{}
+
+				err = refreshTokenObj.UnsafeClaimsWithoutVerification(stdRefreshClaims)
+				if err != nil {
+					expiration = 0
+				} else {
+					expiration = time.Until(stdRefreshClaims.Expiry.Time())
+				}
+
+				switch store != nil {
+				case true:
+					if err = store.Set(req.Context(), utils.GetHashKey(token.AccessToken), refreshToken, expiration); err != nil {
+						scope.Logger.Error(
+							apperrors.ErrSaveTokToStore.Error(),
+							zap.Error(err),
+						)
+					}
+				default:
+					cookManager.DropRefreshTokenCookie(req, writer, refreshToken, expiration)
+				}
+			} else {
+				cookManager.DropAccessTokenCookie(
+					req,
+					writer,
+					accessToken,
+					time.Until(identity.ExpiresAt),
+				)
+				if enableIDTokenCookie {
+					cookManager.DropIDTokenCookie(
+						req,
+						writer,
+						idToken,
+						time.Until(identity.ExpiresAt),
+					)
+				}
+			}
+
+			// @metric a token has been issued
+			metrics.OauthTokensMetric.WithLabelValues("login").Inc()
+			tokenScope := token.Extra("scope")
+			var tScope string
+
+			if tokenScope != nil {
+				tScope, assertOk = tokenScope.(string)
+				if !assertOk {
+					return http.StatusInternalServerError,
+						apperrors.ErrAssertionFailed
+				}
+			}
+
+			var resp TokenResponse
+
+			if enableEncryptedToken {
+				resp = TokenResponse{
+					IDToken:      idToken,
+					AccessToken:  accessToken,
+					RefreshToken: refreshToken,
+					ExpiresIn:    expiresIn,
+					Scope:        tScope,
+					TokenType:    token.TokenType,
+				}
+			} else {
+				resp = TokenResponse{
+					IDToken:      plainIDToken,
+					AccessToken:  token.AccessToken,
+					RefreshToken: refreshToken,
+					ExpiresIn:    expiresIn,
+					Scope:        tScope,
+					TokenType:    token.TokenType,
+				}
+			}
+
+			err = json.NewEncoder(writer).Encode(resp)
+			if err != nil {
+				return http.StatusInternalServerError, err
+			}
+
+			return http.StatusOK, nil
+		}()
+
 		if err != nil {
-			return http.StatusInternalServerError, err
+			clientIP := utils.RealIP(req)
+			scope.Logger.Error(err.Error(),
+				zap.String("client_ip", clientIP),
+				zap.String("remote_addr", req.RemoteAddr),
+			)
+			writer.WriteHeader(code)
 		}
-
-		return http.StatusOK, nil
-	}()
-
-	if err != nil {
-		clientIP := utils.RealIP(req)
-		scope.Logger.Error(err.Error(),
-			zap.String("client_ip", clientIP),
-			zap.String("remote_addr", req.RemoteAddr),
-		)
-		writer.WriteHeader(code)
 	}
 }
 
