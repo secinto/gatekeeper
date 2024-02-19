@@ -441,13 +441,35 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Store,
 	)
 
+	logoutHand := logoutHandler(
+		r.Log,
+		r.Config.PostLogoutRedirectURI,
+		r.Config.RedirectionURL,
+		r.Config.DiscoveryURL,
+		r.Config.RevocationEndpoint,
+		r.Config.CookieAccessName,
+		r.Config.CookieIDTokenName,
+		r.Config.CookieRefreshName,
+		r.Config.ClientID,
+		r.Config.ClientSecret,
+		r.Config.EncryptionKey,
+		r.Config.EnableEncryptedToken,
+		r.Config.ForceEncryptedCookie,
+		r.Config.EnableLogoutRedirect,
+		r.Store,
+		r.Cm,
+		r.IdpClient,
+		r.accessError,
+		r.GetIdentity,
+	)
+
 	// step: add the routing for oauth
 	engine.With(proxyDenyMiddleware(r.Log)).Route(r.Config.BaseURI+r.Config.OAuthURI, func(eng chi.Router) {
 		eng.MethodNotAllowed(handlers.MethodNotAllowHandlder)
 		eng.HandleFunc(constant.AuthorizationURL, r.oauthAuthorizationHandler)
 		eng.Get(constant.CallbackURL, r.oauthCallbackHandler)
 		eng.Get(constant.ExpiredURL, expirationHandler(r.GetIdentity, r.Config.CookieAccessName))
-		eng.With(authMid).Get(constant.LogoutURL, r.logoutHandler)
+		eng.With(authMid).Get(constant.LogoutURL, logoutHand)
 		eng.With(authMid).Get(
 			constant.TokenURL,
 			tokenHandler(r.GetIdentity, r.Config.CookieAccessName, r.accessError),

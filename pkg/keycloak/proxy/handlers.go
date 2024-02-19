@@ -601,184 +601,212 @@ func loginHandler(
 	- optionally, the user can be redirected by to a url
 */
 //nolint:cyclop
-func (r *OauthProxy) logoutHandler(writer http.ResponseWriter, req *http.Request) {
-	// @check if the redirection is there
-	var redirectURL string
+func logoutHandler(
+	logger *zap.Logger,
+	postLogoutRedirectURI string,
+	redirectionURL string,
+	discoveryURL string,
+	revocationEndpoint string,
+	cookieAccessName string,
+	cookieIDTokenName string,
+	cookieRefreshName string,
+	clientID string,
+	clientSecret string,
+	encryptionKey string,
+	enableEncryptedToken bool,
+	forceEncryptedCookie bool,
+	enableLogoutRedirect bool,
+	store storage.Storage,
+	cookManager *cookie.Manager,
+	idpClient *gocloak.GoCloak,
+	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
+	GetIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
+) func(wrt http.ResponseWriter, req *http.Request) {
+	return func(writer http.ResponseWriter, req *http.Request) {
+		// @check if the redirection is there
+		var redirectURL string
 
-	if r.Config.PostLogoutRedirectURI != "" {
-		redirectURL = r.Config.PostLogoutRedirectURI
-	} else {
-		for k := range req.URL.Query() {
-			if k == "redirect" {
-				redirectURL = req.URL.Query().Get("redirect")
+		if postLogoutRedirectURI != "" {
+			redirectURL = postLogoutRedirectURI
+		} else {
+			for k := range req.URL.Query() {
+				if k == "redirect" {
+					redirectURL = req.URL.Query().Get("redirect")
 
-				if redirectURL == "" {
-					// then we can default to redirection url
-					redirectURL = strings.TrimSuffix(
-						r.Config.RedirectionURL,
-						"/oauth/callback",
-					)
+					if redirectURL == "" {
+						// then we can default to redirection url
+						redirectURL = strings.TrimSuffix(
+							redirectionURL,
+							"/oauth/callback",
+						)
+					}
 				}
 			}
 		}
-	}
 
-	scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
-	if !assertOk {
-		r.Log.Error(apperrors.ErrAssertionFailed.Error())
-		writer.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+		if !assertOk {
+			logger.Error(apperrors.ErrAssertionFailed.Error())
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
-	// @step: drop the access token
-	user, err := r.GetIdentity(req, r.Config.CookieAccessName, "")
-	if err != nil {
-		r.accessError(writer, req)
-		return
-	}
+		// @step: drop the access token
+		user, err := GetIdentity(req, cookieAccessName, "")
+		if err != nil {
+			accessError(writer, req)
+			return
+		}
 
-	// step: can either use the access token or the refresh token
-	identityToken := user.RawToken
+		// step: can either use the access token or the refresh token
+		identityToken := user.RawToken
 
-	//nolint:vetshadow
-	if refresh, _, err := retrieveRefreshToken(
-		r.Store,
-		r.Config.CookieRefreshName,
-		r.Config.EncryptionKey,
-		req,
-		user,
-	); err == nil {
-		identityToken = refresh
-	}
+		//nolint:vetshadow
+		if refresh, _, err := retrieveRefreshToken(
+			store,
+			cookieRefreshName,
+			encryptionKey,
+			req,
+			user,
+		); err == nil {
+			identityToken = refresh
+		}
 
-	idToken, _, err := r.retrieveIDToken(req)
-	// we are doing it so that in case with no-redirects=true, we can pass
-	// id token in authorization header
-	if err != nil {
-		idToken = user.RawToken
-	}
+		idToken, _, err := retrieveIDToken(
+			cookieIDTokenName,
+			enableEncryptedToken,
+			forceEncryptedCookie,
+			encryptionKey,
+			req,
+		)
+		// we are doing it so that in case with no-redirects=true, we can pass
+		// id token in authorization header
+		if err != nil {
+			idToken = user.RawToken
+		}
 
-	r.Cm.ClearAllCookies(req, writer)
+		cookManager.ClearAllCookies(req, writer)
 
-	// @metric increment the logout counter
-	metrics.OauthTokensMetric.WithLabelValues("logout").Inc()
+		// @metric increment the logout counter
+		metrics.OauthTokensMetric.WithLabelValues("logout").Inc()
 
-	// step: check if the user has a state session and if so revoke it
-	if r.Store != nil {
-		go func() {
-			if err := r.Store.Delete(req.Context(), utils.GetHashKey(user.RawToken)); err != nil {
-				scope.Logger.Error(
-					apperrors.ErrDelTokFromStore.Error(),
-					zap.Error(err),
+		// step: check if the user has a state session and if so revoke it
+		if store != nil {
+			go func() {
+				if err := store.Delete(req.Context(), utils.GetHashKey(user.RawToken)); err != nil {
+					scope.Logger.Error(
+						apperrors.ErrDelTokFromStore.Error(),
+						zap.Error(err),
+					)
+				}
+			}()
+		}
+
+		// @check if we should redirect to the provider
+		if enableLogoutRedirect {
+			postLogoutParams := ""
+			if postLogoutRedirectURI != "" {
+				postLogoutParams = fmt.Sprintf(
+					"?id_token_hint=%s&post_logout_redirect_uri=%s",
+					idToken,
+					url.QueryEscape(redirectURL),
 				)
 			}
-		}()
-	}
 
-	// @check if we should redirect to the provider
-	if r.Config.EnableLogoutRedirect {
-		postLogoutParams := ""
-		if r.Config.PostLogoutRedirectURI != "" {
-			postLogoutParams = fmt.Sprintf(
-				"?id_token_hint=%s&post_logout_redirect_uri=%s",
-				idToken,
-				url.QueryEscape(redirectURL),
+			sendTo := fmt.Sprintf(
+				"%s/protocol/openid-connect/logout%s",
+				strings.TrimSuffix(
+					discoveryURL,
+					"/.well-known/openid-configuration",
+				),
+				postLogoutParams,
 			)
+
+			redirectToURL(
+				scope.Logger,
+				sendTo,
+				writer,
+				req,
+				http.StatusSeeOther,
+			)
+
+			return
 		}
 
-		sendTo := fmt.Sprintf(
-			"%s/protocol/openid-connect/logout%s",
+		// set the default revocation url
+		revokeDefault := fmt.Sprintf(
+			"%s/protocol/openid-connect/revoke",
 			strings.TrimSuffix(
-				r.Config.DiscoveryURL,
+				discoveryURL,
 				"/.well-known/openid-configuration",
 			),
-			postLogoutParams,
 		)
 
-		redirectToURL(
-			scope.Logger,
-			sendTo,
-			writer,
-			req,
-			http.StatusSeeOther,
-		)
+		revocationURL := utils.DefaultTo(revocationEndpoint, revokeDefault)
 
-		return
-	}
+		// step: do we have a revocation endpoint?
+		if revocationURL != "" {
+			client := idpClient.RestyClient().GetClient()
+			// step: add the authentication headers
+			encodedID := url.QueryEscape(clientID)
+			encodedSecret := url.QueryEscape(clientSecret)
 
-	// set the default revocation url
-	revokeDefault := fmt.Sprintf(
-		"%s/protocol/openid-connect/revoke",
-		strings.TrimSuffix(
-			r.Config.DiscoveryURL,
-			"/.well-known/openid-configuration",
-		),
-	)
-
-	revocationURL := utils.DefaultTo(r.Config.RevocationEndpoint, revokeDefault)
-
-	// step: do we have a revocation endpoint?
-	if revocationURL != "" {
-		client := r.IdpClient.RestyClient().GetClient()
-		// step: add the authentication headers
-		encodedID := url.QueryEscape(r.Config.ClientID)
-		encodedSecret := url.QueryEscape(r.Config.ClientSecret)
-
-		// step: construct the url for revocation
-		request, err := http.NewRequest(
-			http.MethodPost,
-			revocationURL,
-			bytes.NewBufferString(
-				fmt.Sprintf("token=%s", identityToken),
-			),
-		)
-		if err != nil {
-			scope.Logger.Error(apperrors.ErrCreateRevocationReq.Error(), zap.Error(err))
-			writer.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		// step: add the authentication headers and content-type
-		request.SetBasicAuth(encodedID, encodedSecret)
-		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-		start := time.Now()
-		response, err := client.Do(request)
-		if err != nil {
-			scope.Logger.Error(apperrors.ErrRevocationReqFailure.Error(), zap.Error(err))
-			writer.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		defer response.Body.Close()
-
-		metrics.OauthLatencyMetric.WithLabelValues("revocation").
-			Observe(time.Since(start).Seconds())
-
-		// step: check the response
-		switch response.StatusCode {
-		case http.StatusOK:
-			scope.Logger.Info(
-				"successfully logged out of the endpoint",
-				zap.String("email", user.Email),
+			// step: construct the url for revocation
+			request, err := http.NewRequest(
+				http.MethodPost,
+				revocationURL,
+				bytes.NewBufferString(
+					fmt.Sprintf("token=%s", identityToken),
+				),
 			)
-		default:
-			content, _ := io.ReadAll(response.Body)
+			if err != nil {
+				scope.Logger.Error(apperrors.ErrCreateRevocationReq.Error(), zap.Error(err))
+				writer.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 
-			scope.Logger.Error(
-				apperrors.ErrInvalidRevocationResp.Error(),
-				zap.Int("status", response.StatusCode),
-				zap.String("response", string(content)),
-			)
+			// step: add the authentication headers and content-type
+			request.SetBasicAuth(encodedID, encodedSecret)
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-			writer.WriteHeader(http.StatusInternalServerError)
-			return
+			start := time.Now()
+			response, err := client.Do(request)
+			if err != nil {
+				scope.Logger.Error(apperrors.ErrRevocationReqFailure.Error(), zap.Error(err))
+				writer.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			defer response.Body.Close()
+
+			metrics.OauthLatencyMetric.WithLabelValues("revocation").
+				Observe(time.Since(start).Seconds())
+
+			// step: check the response
+			switch response.StatusCode {
+			case http.StatusOK:
+				scope.Logger.Info(
+					"successfully logged out of the endpoint",
+					zap.String("email", user.Email),
+				)
+			default:
+				content, _ := io.ReadAll(response.Body)
+
+				scope.Logger.Error(
+					apperrors.ErrInvalidRevocationResp.Error(),
+					zap.Int("status", response.StatusCode),
+					zap.String("response", string(content)),
+				)
+
+				writer.WriteHeader(http.StatusInternalServerError)
+				return
+			}
 		}
-	}
 
-	// step: should we redirect the user
-	if redirectURL != "" {
-		redirectToURL(scope.Logger, redirectURL, writer, req, http.StatusSeeOther)
+		// step: should we redirect the user
+		if redirectURL != "" {
+			redirectToURL(scope.Logger, redirectURL, writer, req, http.StatusSeeOther)
+		}
 	}
 }
 
@@ -885,20 +913,26 @@ func retrieveRefreshToken(
 }
 
 // retrieveIDToken retrieves the id token from cookie
-func (r *OauthProxy) retrieveIDToken(req *http.Request) (string, string, error) {
+func retrieveIDToken(
+	cookieIDTokenName string,
+	enableEncryptedToken bool,
+	forceEncryptedCookie bool,
+	encryptionKey string,
+	req *http.Request,
+) (string, string, error) {
 	var token string
 	var err error
 	var encrypted string
 
-	token, err = utils.GetTokenInCookie(req, r.Config.CookieIDTokenName)
+	token, err = utils.GetTokenInCookie(req, cookieIDTokenName)
 
 	if err != nil {
 		return token, "", err
 	}
 
-	if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
+	if enableEncryptedToken || forceEncryptedCookie {
 		encrypted = token
-		token, err = encryption.DecodeText(token, r.Config.EncryptionKey)
+		token, err = encryption.DecodeText(token, encryptionKey)
 	}
 
 	return token, encrypted, err

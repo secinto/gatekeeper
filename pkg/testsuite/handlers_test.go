@@ -675,8 +675,10 @@ func TestLogoutHandlerGood(t *testing.T) {
 			},
 		},
 		{
-			Name:          "TestLogoutWithEmptyRedirectQueryParam",
-			ProxySettings: func(c *config.Config) {},
+			Name: "TestLogoutWithEmptyRedirectQueryParam",
+			ProxySettings: func(c *config.Config) {
+				c.RedirectionURL = "http://example.com"
+			},
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:          proxy.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.LogoutURL) + "?redirect=",
