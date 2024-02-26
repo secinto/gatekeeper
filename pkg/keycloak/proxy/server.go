@@ -463,11 +463,40 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.GetIdentity,
 	)
 
+	oauthCallbackHand := oauthCallbackHandler(
+		r.Log,
+		r.Config.ClientID,
+		r.Config.Realm,
+		r.Config.CookiePKCEName,
+		r.Config.CookieRequestURIName,
+		r.Config.PostLoginRedirectPath,
+		r.Config.EncryptionKey,
+		r.Config.SkipTokenVerification,
+		r.Config.SkipAccessTokenClientIDCheck,
+		r.Config.SkipAccessTokenIssuerCheck,
+		r.Config.EnableRefreshTokens,
+		r.Config.EnableUma,
+		r.Config.EnableUmaMethodScope,
+		r.Config.EnableIDTokenCookie,
+		r.Config.EnableEncryptedToken,
+		r.Config.ForceEncryptedCookie,
+		r.Config.EnablePKCE,
+		r.Provider,
+		r.Cm,
+		r.pat,
+		r.IdpClient,
+		r.Store,
+		r.newOAuth2Config,
+		r.getRedirectionURL,
+		r.accessForbidden,
+		r.accessError,
+	)
+
 	// step: add the routing for oauth
 	engine.With(proxyDenyMiddleware(r.Log)).Route(r.Config.BaseURI+r.Config.OAuthURI, func(eng chi.Router) {
 		eng.MethodNotAllowed(handlers.MethodNotAllowHandlder)
 		eng.HandleFunc(constant.AuthorizationURL, r.oauthAuthorizationHandler)
-		eng.Get(constant.CallbackURL, r.oauthCallbackHandler)
+		eng.Get(constant.CallbackURL, oauthCallbackHand)
 		eng.Get(constant.ExpiredURL, expirationHandler(r.GetIdentity, r.Config.CookieAccessName))
 		eng.With(authMid).Get(constant.LogoutURL, logoutHand)
 		eng.With(authMid).Get(

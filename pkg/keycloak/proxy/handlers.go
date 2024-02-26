@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Nerzal/gocloak/v12"
+	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -177,179 +178,219 @@ func (r *OauthProxy) oauthAuthorizationHandler(wrt http.ResponseWriter, req *htt
 	oauthCallbackHandler is responsible for handling the response from oauth service
 */
 //nolint:cyclop
-func (r *OauthProxy) oauthCallbackHandler(writer http.ResponseWriter, req *http.Request) {
-	if r.Config.SkipTokenVerification {
-		writer.WriteHeader(http.StatusNotAcceptable)
-		return
-	}
-
-	scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
-	if !assertOk {
-		r.Log.Error(apperrors.ErrAssertionFailed.Error())
-		return
-	}
-
-	scope.Logger.Debug("callback handler")
-	accessToken, identityToken, refreshToken, err := r.getCodeFlowTokens(scope, writer, req)
-	if err != nil {
-		return
-	}
-
-	rawAccessToken := accessToken
-	oAccToken, _, err := verifyOIDCTokens(
-		req.Context(),
-		r.Provider,
-		r.Config.ClientID,
-		accessToken,
-		identityToken,
-		r.Config.SkipAccessTokenClientIDCheck,
-		r.Config.SkipAccessTokenIssuerCheck,
-	)
-	if err != nil {
-		scope.Logger.Error(err.Error())
-		r.accessForbidden(writer, req)
-		return
-	}
-
-	scope.Logger.Debug(
-		"issuing access token for user",
-		zap.String("access token", rawAccessToken),
-		zap.String("sub", oAccToken.Subject),
-		zap.String("expires", oAccToken.Expiry.Format(time.RFC3339)),
-		zap.String("duration", time.Until(oAccToken.Expiry).String()),
-	)
-
-	scope.Logger.Info(
-		"issuing access token for user",
-		zap.String("sub", oAccToken.Subject),
-		zap.String("expires", oAccToken.Expiry.Format(time.RFC3339)),
-		zap.String("duration", time.Until(oAccToken.Expiry).String()),
-	)
-
-	// @metric a token has been issued
-	metrics.OauthTokensMetric.WithLabelValues("issued").Inc()
-
-	oidcTokensCookiesExp := time.Until(oAccToken.Expiry)
-	// step: does the response have a refresh token and we do NOT ignore refresh tokens?
-	if r.Config.EnableRefreshTokens && refreshToken != "" {
-		var encrypted string
-		var stdRefreshClaims *jwt.Claims
-		stdRefreshClaims, err = parseRefreshToken(refreshToken)
-		if err != nil {
-			scope.Logger.Error(apperrors.ErrParseRefreshToken.Error(), zap.Error(err))
-			r.accessForbidden(writer, req)
+func oauthCallbackHandler(
+	logger *zap.Logger,
+	clientID string,
+	realm string,
+	cookiePKCEName string,
+	cookieRequestURIName string,
+	postLoginRedirectPath string,
+	encryptionKey string,
+	skipTokenVerification bool,
+	skipAccessTokenClientIDCheck bool,
+	skipAccessTokenIssuerCheck bool,
+	enableRefreshTokens bool,
+	enableUma bool,
+	enableUmaMethodScope bool,
+	enableIDTokenCookie bool,
+	enableEncryptedToken bool,
+	forceEncryptedCookie bool,
+	enablePKCE bool,
+	provider *oidc3.Provider,
+	cookManager *cookie.Manager,
+	pat *PAT,
+	idpClient *gocloak.GoCloak,
+	store storage.Storage,
+	newOAuth2Config func(redirectionURL string) *oauth2.Config,
+	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
+) func(writer http.ResponseWriter, req *http.Request) {
+	return func(writer http.ResponseWriter, req *http.Request) {
+		if skipTokenVerification {
+			writer.WriteHeader(http.StatusNotAcceptable)
 			return
 		}
 
-		if stdRefreshClaims.Subject != oAccToken.Subject {
-			scope.Logger.Error(apperrors.ErrAccRefreshTokenMismatch.Error(), zap.Error(err))
-			r.accessForbidden(writer, req)
+		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+		if !assertOk {
+			logger.Error(apperrors.ErrAssertionFailed.Error())
 			return
 		}
 
-		oidcTokensCookiesExp = time.Until(stdRefreshClaims.Expiry.Time())
-		encrypted, err = r.encryptToken(scope, refreshToken, r.Config.EncryptionKey, "refresh", writer)
+		scope.Logger.Debug("callback handler")
+		accessToken, identityToken, refreshToken, err := getCodeFlowTokens(
+			scope,
+			writer,
+			req,
+			enablePKCE,
+			cookiePKCEName,
+			idpClient,
+			accessForbidden,
+			accessError,
+			newOAuth2Config,
+			getRedirectionURL,
+		)
 		if err != nil {
 			return
 		}
 
-		switch {
-		case r.Store != nil:
-			if err = r.Store.Set(req.Context(), utils.GetHashKey(rawAccessToken), encrypted, oidcTokensCookiesExp); err != nil {
-				scope.Logger.Error(
-					apperrors.ErrSaveTokToStore.Error(),
-					zap.Error(err),
-					zap.String("sub", oAccToken.Subject),
-				)
-				r.accessForbidden(writer, req)
+		rawAccessToken := accessToken
+		oAccToken, _, err := verifyOIDCTokens(
+			req.Context(),
+			provider,
+			clientID,
+			accessToken,
+			identityToken,
+			skipAccessTokenClientIDCheck,
+			skipAccessTokenIssuerCheck,
+		)
+		if err != nil {
+			scope.Logger.Error(err.Error())
+			accessForbidden(writer, req)
+			return
+		}
+
+		scope.Logger.Debug(
+			"issuing access token for user",
+			zap.String("access token", rawAccessToken),
+			zap.String("sub", oAccToken.Subject),
+			zap.String("expires", oAccToken.Expiry.Format(time.RFC3339)),
+			zap.String("duration", time.Until(oAccToken.Expiry).String()),
+		)
+
+		scope.Logger.Info(
+			"issuing access token for user",
+			zap.String("sub", oAccToken.Subject),
+			zap.String("expires", oAccToken.Expiry.Format(time.RFC3339)),
+			zap.String("duration", time.Until(oAccToken.Expiry).String()),
+		)
+
+		// @metric a token has been issued
+		metrics.OauthTokensMetric.WithLabelValues("issued").Inc()
+
+		oidcTokensCookiesExp := time.Until(oAccToken.Expiry)
+		// step: does the response have a refresh token and we do NOT ignore refresh tokens?
+		if enableRefreshTokens && refreshToken != "" {
+			var encrypted string
+			var stdRefreshClaims *jwt.Claims
+			stdRefreshClaims, err = parseRefreshToken(refreshToken)
+			if err != nil {
+				scope.Logger.Error(apperrors.ErrParseRefreshToken.Error(), zap.Error(err))
+				accessForbidden(writer, req)
 				return
 			}
-		default:
-			r.Cm.DropRefreshTokenCookie(req, writer, encrypted, oidcTokensCookiesExp)
-		}
-	}
 
-	// step: decode the request variable
-	redirectURI := "/"
-	if req.URL.Query().Get("state") != "" {
-		if encodedRequestURI, _ := req.Cookie(r.Config.CookieRequestURIName); encodedRequestURI != nil {
-			redirectURI = r.getRequestURIFromCookie(scope, encodedRequestURI)
-		}
-	}
+			if stdRefreshClaims.Subject != oAccToken.Subject {
+				scope.Logger.Error(apperrors.ErrAccRefreshTokenMismatch.Error(), zap.Error(err))
+				accessForbidden(writer, req)
+				return
+			}
 
-	r.Cm.ClearStateParameterCookie(req, writer)
-	r.Cm.ClearPKCECookie(req, writer)
-
-	if r.Config.PostLoginRedirectPath != "" && redirectURI == "/" {
-		redirectURI = r.Config.PostLoginRedirectPath
-	}
-
-	var umaToken string
-	var umaError error
-	if r.Config.EnableUma {
-		var methodScope *string
-		if r.Config.EnableUmaMethodScope {
-			ms := "method:" + req.Method
-			methodScope = &ms
-		}
-		// we are not returning access forbidden immediately because we want to setup
-		// access/refresh cookie as authentication already was done properly and user
-		// could try to get new uma token/cookie, e.g in case he tried first to access
-		// resource to which he doesn't have access
-
-		token, erru := getRPT(
-			req.Context(),
-			r.pat,
-			r.IdpClient,
-			r.Config.Realm,
-			redirectURI,
-			accessToken,
-			methodScope,
-		)
-		umaError = erru
-		if token != nil {
-			umaToken = token.AccessToken
-		}
-	}
-
-	// step: are we encrypting the access token?
-	if r.Config.EnableEncryptedToken || r.Config.ForceEncryptedCookie {
-		accessToken, err = r.encryptToken(scope, accessToken, r.Config.EncryptionKey, "access", writer)
-		if err != nil {
-			return
-		}
-
-		identityToken, err = r.encryptToken(scope, identityToken, r.Config.EncryptionKey, "id", writer)
-		if err != nil {
-			return
-		}
-
-		if r.Config.EnableUma && umaError == nil {
-			umaToken, err = r.encryptToken(scope, umaToken, r.Config.EncryptionKey, "uma", writer)
+			oidcTokensCookiesExp = time.Until(stdRefreshClaims.Expiry.Time())
+			encrypted, err = encryptToken(scope, refreshToken, encryptionKey, "refresh", writer)
 			if err != nil {
 				return
 			}
+
+			switch {
+			case store != nil:
+				if err = store.Set(req.Context(), utils.GetHashKey(rawAccessToken), encrypted, oidcTokensCookiesExp); err != nil {
+					scope.Logger.Error(
+						apperrors.ErrSaveTokToStore.Error(),
+						zap.Error(err),
+						zap.String("sub", oAccToken.Subject),
+					)
+					accessForbidden(writer, req)
+					return
+				}
+			default:
+				cookManager.DropRefreshTokenCookie(req, writer, encrypted, oidcTokensCookiesExp)
+			}
 		}
-	}
 
-	r.Cm.DropAccessTokenCookie(req, writer, accessToken, oidcTokensCookiesExp)
-	if r.Config.EnableIDTokenCookie {
-		r.Cm.DropIDTokenCookie(req, writer, identityToken, oidcTokensCookiesExp)
-	}
+		// step: decode the request variable
+		redirectURI := "/"
+		if req.URL.Query().Get("state") != "" {
+			if encodedRequestURI, _ := req.Cookie(cookieRequestURIName); encodedRequestURI != nil {
+				redirectURI = getRequestURIFromCookie(scope, encodedRequestURI)
+			}
+		}
 
-	if r.Config.EnableUma && umaError == nil {
-		scope.Logger.Debug("got uma token", zap.String("uma", umaToken))
-		r.Cm.DropUMATokenCookie(req, writer, umaToken, oidcTokensCookiesExp)
-	}
+		cookManager.ClearStateParameterCookie(req, writer)
+		cookManager.ClearPKCECookie(req, writer)
 
-	if umaError != nil {
-		scope.Logger.Error(umaError.Error())
-		r.accessForbidden(writer, req)
-		return
-	}
+		if postLoginRedirectPath != "" && redirectURI == "/" {
+			redirectURI = postLoginRedirectPath
+		}
 
-	scope.Logger.Debug("redirecting to", zap.String("location", redirectURI))
-	redirectToURL(scope.Logger, redirectURI, writer, req, http.StatusSeeOther)
+		var umaToken string
+		var umaError error
+		if enableUma {
+			var methodScope *string
+			if enableUmaMethodScope {
+				ms := constant.UmaMethodScope + req.Method
+				methodScope = &ms
+			}
+			// we are not returning access forbidden immediately because we want to setup
+			// access/refresh cookie as authentication already was done properly and user
+			// could try to get new uma token/cookie, e.g in case he tried first to access
+			// resource to which he doesn't have access
+
+			token, erru := getRPT(
+				req.Context(),
+				pat,
+				idpClient,
+				realm,
+				redirectURI,
+				accessToken,
+				methodScope,
+			)
+			umaError = erru
+			if token != nil {
+				umaToken = token.AccessToken
+			}
+		}
+
+		// step: are we encrypting the access token?
+		if enableEncryptedToken || forceEncryptedCookie {
+			accessToken, err = encryptToken(scope, accessToken, encryptionKey, "access", writer)
+			if err != nil {
+				return
+			}
+
+			identityToken, err = encryptToken(scope, identityToken, encryptionKey, "id", writer)
+			if err != nil {
+				return
+			}
+
+			if enableUma && umaError == nil {
+				umaToken, err = encryptToken(scope, umaToken, encryptionKey, "uma", writer)
+				if err != nil {
+					return
+				}
+			}
+		}
+
+		cookManager.DropAccessTokenCookie(req, writer, accessToken, oidcTokensCookiesExp)
+		if enableIDTokenCookie {
+			cookManager.DropIDTokenCookie(req, writer, identityToken, oidcTokensCookiesExp)
+		}
+
+		if enableUma && umaError == nil {
+			scope.Logger.Debug("got uma token", zap.String("uma", umaToken))
+			cookManager.DropUMATokenCookie(req, writer, umaToken, oidcTokensCookiesExp)
+		}
+
+		if umaError != nil {
+			scope.Logger.Error(umaError.Error())
+			accessForbidden(writer, req)
+			return
+		}
+
+		scope.Logger.Debug("redirecting to", zap.String("location", redirectURI))
+		redirectToURL(scope.Logger, redirectURI, writer, req, http.StatusSeeOther)
+	}
 }
 
 /*

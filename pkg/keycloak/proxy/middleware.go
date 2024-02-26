@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,7 +81,7 @@ func entrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 
 			// @metric record the time taken then response code
 			metrics.LatencyMetric.Observe(time.Since(start).Seconds())
-			metrics.StatusMetric.WithLabelValues(fmt.Sprintf("%d", resp.Status()), req.Method).Inc()
+			metrics.StatusMetric.WithLabelValues(strconv.Itoa(resp.Status()), req.Method).Inc()
 
 			// place back the original uri for any later consumers
 			req.URL.Path = scope.Path
@@ -528,7 +529,7 @@ func authorizationMiddleware(
 			if enableUma {
 				var methodScope *string
 				if enableUmaMethodScope {
-					methSc := "method:" + req.Method
+					methSc := constant.UmaMethodScope + req.Method
 					if noProxy {
 						xForwardedMethod := req.Header.Get("X-Forwarded-Method")
 						if xForwardedMethod == "" {
@@ -537,7 +538,7 @@ func authorizationMiddleware(
 							next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 							return
 						}
-						methSc = "method:" + xForwardedMethod
+						methSc = constant.UmaMethodScope + xForwardedMethod
 					}
 					methodScope = &methSc
 				}
