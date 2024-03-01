@@ -492,10 +492,22 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.accessError,
 	)
 
+	oauthAuthorizationHand := oauthAuthorizationHandler(
+		r.Log,
+		r.Config.SkipTokenVerification,
+		r.Config.Scopes,
+		r.Config.EnablePKCE,
+		r.Config.SignInPage,
+		r.Cm,
+		r.newOAuth2Config,
+		r.getRedirectionURL,
+		r.customSignInPage,
+	)
+
 	// step: add the routing for oauth
 	engine.With(proxyDenyMiddleware(r.Log)).Route(r.Config.BaseURI+r.Config.OAuthURI, func(eng chi.Router) {
 		eng.MethodNotAllowed(handlers.MethodNotAllowHandlder)
-		eng.HandleFunc(constant.AuthorizationURL, r.oauthAuthorizationHandler)
+		eng.HandleFunc(constant.AuthorizationURL, oauthAuthorizationHand)
 		eng.Get(constant.CallbackURL, oauthCallbackHand)
 		eng.Get(constant.ExpiredURL, expirationHandler(r.GetIdentity, r.Config.CookieAccessName))
 		eng.With(authMid).Get(constant.LogoutURL, logoutHand)

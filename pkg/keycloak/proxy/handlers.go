@@ -106,72 +106,84 @@ func getRedirectionURL(
 }
 
 // oauthAuthorizationHandler is responsible for performing the redirection to oauth provider
-func (r *OauthProxy) oauthAuthorizationHandler(wrt http.ResponseWriter, req *http.Request) {
-	if r.Config.SkipTokenVerification {
-		wrt.WriteHeader(http.StatusNotAcceptable)
-		return
-	}
-
-	scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
-	if !assertOk {
-		r.Log.Error(apperrors.ErrAssertionFailed.Error())
-		return
-	}
-
-	scope.Logger.Debug("authorization handler")
-
-	conf := r.newOAuth2Config(r.getRedirectionURL(wrt, req))
-	// step: set the access type of the session
-	accessType := oauth2.AccessTypeOnline
-
-	if utils.ContainedIn("offline", r.Config.Scopes) {
-		accessType = oauth2.AccessTypeOffline
-	}
-
-	authCodeOptions := []oauth2.AuthCodeOption{
-		accessType,
-	}
-
-	if r.Config.EnablePKCE {
-		codeVerifier, err := pkce.NewCodeVerifierWithLength(96)
-		if err != nil {
-			r.Log.Error(
-				apperrors.ErrPKCECodeCreation.Error(),
-			)
+func oauthAuthorizationHandler(
+	logger *zap.Logger,
+	skipTokenVerification bool,
+	scopes []string,
+	enablePKCE bool,
+	signInPage string,
+	cookManager *cookie.Manager,
+	newOAuth2Config func(redirectionURL string) *oauth2.Config,
+	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
+	customSignInPage func(wrt http.ResponseWriter, authURL string),
+) func(wrt http.ResponseWriter, req *http.Request) {
+	return func(wrt http.ResponseWriter, req *http.Request) {
+		if skipTokenVerification {
+			wrt.WriteHeader(http.StatusNotAcceptable)
 			return
 		}
 
-		codeChallenge := pkce.CodeChallengeS256(codeVerifier)
-		authCodeOptions = append(
-			authCodeOptions,
-			oauth2.SetAuthURLParam(pkce.ParamCodeChallenge, codeChallenge),
-			oauth2.SetAuthURLParam(pkce.ParamCodeChallengeMethod, pkce.MethodS256),
+		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+		if !assertOk {
+			logger.Error(apperrors.ErrAssertionFailed.Error())
+			return
+		}
+
+		scope.Logger.Debug("authorization handler")
+
+		conf := newOAuth2Config(getRedirectionURL(wrt, req))
+		// step: set the access type of the session
+		accessType := oauth2.AccessTypeOnline
+
+		if utils.ContainedIn("offline", scopes) {
+			accessType = oauth2.AccessTypeOffline
+		}
+
+		authCodeOptions := []oauth2.AuthCodeOption{
+			accessType,
+		}
+
+		if enablePKCE {
+			codeVerifier, err := pkce.NewCodeVerifierWithLength(96)
+			if err != nil {
+				logger.Error(
+					apperrors.ErrPKCECodeCreation.Error(),
+				)
+				return
+			}
+
+			codeChallenge := pkce.CodeChallengeS256(codeVerifier)
+			authCodeOptions = append(
+				authCodeOptions,
+				oauth2.SetAuthURLParam(pkce.ParamCodeChallenge, codeChallenge),
+				oauth2.SetAuthURLParam(pkce.ParamCodeChallengeMethod, pkce.MethodS256),
+			)
+			cookManager.DropPKCECookie(wrt, codeVerifier)
+		}
+
+		authURL := conf.AuthCodeURL(
+			req.URL.Query().Get("state"),
+			authCodeOptions...,
 		)
-		r.Cm.DropPKCECookie(wrt, codeVerifier)
+
+		clientIP := utils.RealIP(req)
+
+		scope.Logger.Debug(
+			"incoming authorization request from client address",
+			zap.Any("access_type", accessType),
+			zap.String("client_ip", clientIP),
+			zap.String("remote_addr", req.RemoteAddr),
+		)
+
+		// step: if we have a custom sign in page, lets display that
+		if signInPage != "" {
+			customSignInPage(wrt, signInPage)
+			return
+		}
+
+		scope.Logger.Debug("redirecting to auth_url", zap.String("auth_url", authURL))
+		redirectToURL(scope.Logger, authURL, wrt, req, http.StatusSeeOther)
 	}
-
-	authURL := conf.AuthCodeURL(
-		req.URL.Query().Get("state"),
-		authCodeOptions...,
-	)
-
-	clientIP := utils.RealIP(req)
-
-	scope.Logger.Debug(
-		"incoming authorization request from client address",
-		zap.Any("access_type", accessType),
-		zap.String("client_ip", clientIP),
-		zap.String("remote_addr", req.RemoteAddr),
-	)
-
-	// step: if we have a custom sign in page, lets display that
-	if r.Config.SignInPage != "" {
-		r.customSignInPage(wrt, r.Config.SignInPage)
-		return
-	}
-
-	scope.Logger.Debug("redirecting to auth_url", zap.String("auth_url", authURL))
-	redirectToURL(scope.Logger, authURL, wrt, req, http.StatusSeeOther)
 }
 
 /*
