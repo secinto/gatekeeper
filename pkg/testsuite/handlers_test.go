@@ -729,7 +729,6 @@ func TestSkipOpenIDProviderTLSVerifyLogoutHandler(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
 			failure, assertOk := r.(string)
-
 			if !assertOk {
 				t.Fatalf(apperrors.ErrAssertionFailed.Error())
 			}
@@ -846,7 +845,7 @@ func TestServiceRedirect(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:              "/admin",
+					URI:              FakeAdminURL,
 					Redirects:        true,
 					ExpectedCode:     http.StatusSeeOther,
 					ExpectedLocation: "/oauth/authorize?state",
@@ -860,7 +859,7 @@ func TestServiceRedirect(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:          "/admin",
+					URI:          FakeAdminURL,
 					ExpectedCode: http.StatusUnauthorized,
 				},
 			},
@@ -895,7 +894,7 @@ func TestAuthorizationURLWithSkipToken(t *testing.T) {
 func TestAuthorizationURL(t *testing.T) {
 	requests := []fakeRequest{
 		{
-			URI:              "/admin",
+			URI:              FakeAdminURL,
 			Redirects:        true,
 			ExpectedLocation: "/oauth/authorize?state",
 			ExpectedCode:     http.StatusSeeOther,

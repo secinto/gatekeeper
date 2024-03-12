@@ -75,19 +75,17 @@ func init() {
 // NewProxy create's a new proxy from configuration
 //
 //nolint:cyclop
-func NewProxy(config *config.Config, log *zap.Logger) (*OauthProxy, error) {
+func NewProxy(config *config.Config, log *zap.Logger, upstream reverseProxy) (*OauthProxy, error) {
 	var err error
 	// create the service logger
 	if log == nil {
 		log, err = createLogger(config)
-
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	err = config.Update()
-
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +151,7 @@ func NewProxy(config *config.Config, log *zap.Logger) (*OauthProxy, error) {
 		)
 	}
 
+	svc.Upstream = upstream
 	// are we running in forwarding mode?
 	if config.EnableForwarding {
 		if err := svc.createForwardingProxy(); err != nil {
@@ -283,8 +282,10 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		zap.String("url", r.Config.Upstream),
 	)
 
-	if err := r.createUpstreamProxy(r.Endpoint); err != nil {
-		return err
+	if r.Upstream == nil {
+		if err := r.createUpstreamProxy(r.Endpoint); err != nil {
+			return err
+		}
 	}
 
 	engine := chi.NewRouter()
@@ -364,8 +365,16 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		engine.Use(corsHandler.Handler)
 	}
 
+	proxyMiddle := proxyMiddleware(
+		r.Log,
+		r.Config.CorsOrigins,
+		r.Config.Headers,
+		r.Endpoint,
+		r.Config.PreserveHost,
+		r.Upstream,
+	)
 	if !r.Config.NoProxy {
-		engine.Use(r.proxyMiddleware)
+		engine.Use(proxyMiddle)
 	}
 
 	r.Router = engine
@@ -745,7 +754,15 @@ func (r *OauthProxy) createForwardingProxy() error {
 		return err
 	}
 	//nolint:bodyclose
-	forwardingHandler := r.forwardProxyHandler()
+	forwardingHandler := forwardProxyHandler(
+		r.Log,
+		r.pat,
+		r.rpt,
+		r.Config.EnableUma,
+		r.Config.ForwardingDomains,
+		r.Config.EnableHmac,
+		r.Config.EncryptionKey,
+	)
 
 	// set the http handler
 	proxy, assertOk := r.Upstream.(*goproxy.ProxyHttpServer)

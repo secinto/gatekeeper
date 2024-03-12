@@ -56,12 +56,12 @@ func TestWebSocket(t *testing.T) {
 	_, proxyServer, proxyURL := newTestProxyService(cfg)
 	defer proxyServer.Close()
 
-	resp, _, err := makeTestCodeFlowLogin(proxyURL+"/admin", false)
-	assert.NoError(t, err)
+	resp, _, err := makeTestCodeFlowLogin(proxyURL+FakeAdminURL, false)
+	require.NoError(t, err)
 	assert.NotNil(t, resp)
 
 	err = resp.Body.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	var cookie *http.Cookie
 	for _, c := range resp.Cookies() {
