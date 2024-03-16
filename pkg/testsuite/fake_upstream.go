@@ -2,6 +2,7 @@ package testsuite
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 
@@ -14,16 +15,16 @@ type fakeUpstreamResponse struct {
 	Method  string      `json:"method"`
 	Address string      `json:"address"`
 	Headers http.Header `json:"headers"`
+	Body    string      `json:"body"`
 }
 
 // FakeUpstreamService acts as a fake upstream service, returns the headers and request
 type FakeUpstreamService struct{}
 
 func (f *FakeUpstreamService) ServeHTTP(wrt http.ResponseWriter, req *http.Request) {
-	wrt.Header().Set(TestProxyAccepted, "true")
-
 	upgrade := strings.ToLower(req.Header.Get("Upgrade"))
 	if upgrade == "websocket" {
+		wrt.Header().Set(TestProxyAccepted, "true")
 		websocket.Handler(func(wsock *websocket.Conn) {
 			defer wsock.Close()
 			var data []byte
@@ -41,6 +42,12 @@ func (f *FakeUpstreamService) ServeHTTP(wrt http.ResponseWriter, req *http.Reque
 			_ = websocket.Message.Send(wsock, content)
 		}).ServeHTTP(wrt, req)
 	} else {
+		reqBody, err := io.ReadAll(req.Body)
+		if err != nil {
+			wrt.WriteHeader(http.StatusInternalServerError)
+		}
+
+		wrt.Header().Set(TestProxyAccepted, "true")
 		wrt.Header().Set("Content-Type", "application/json")
 		content, err := json.Marshal(&fakeUpstreamResponse{
 			// r.RequestURI is what was received by the proxy.
@@ -50,6 +57,7 @@ func (f *FakeUpstreamService) ServeHTTP(wrt http.ResponseWriter, req *http.Reque
 			Method:  req.Method,
 			Address: req.RemoteAddr,
 			Headers: req.Header,
+			Body:    string(reqBody),
 		})
 
 		if err != nil {

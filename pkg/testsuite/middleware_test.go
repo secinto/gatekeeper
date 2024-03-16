@@ -2531,6 +2531,9 @@ func TestLogRealIP(t *testing.T) {
 
 //nolint:funlen
 func TestEnableOpa(t *testing.T) {
+	upstreamService := httptest.NewServer(&FakeUpstreamService{})
+	upstreamURL := upstreamService.URL
+
 	requests := []struct {
 		Name              string
 		ProxySettings     func(c *config.Config)
@@ -2546,17 +2549,23 @@ func TestEnableOpa(t *testing.T) {
 				conf.OpaTimeout = 60 * time.Second
 				conf.ClientID = ValidUsername
 				conf.ClientSecret = ValidPassword
+				conf.Upstream = upstreamURL
 			},
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:           FakeTestURL,
 					ExpectedProxy: true,
-					HasToken:      true,
-					Redirects:     false,
-					ExpectedCode:  http.StatusOK,
+					Method:        "POST",
+					FormValues: map[string]string{
+						"Name": "Whatever",
+					},
+					HasToken:     true,
+					Redirects:    false,
+					ExpectedCode: http.StatusOK,
 					ExpectedContent: func(body string, testNum int) {
 						assert.Contains(t, body, "test")
 						assert.Contains(t, body, "method")
+						assert.Contains(t, body, "Whatever")
 					},
 				},
 			},
@@ -2566,8 +2575,9 @@ func TestEnableOpa(t *testing.T) {
 			default allow := false
 
 			allow {
-				input.method = "GET"
+				input.method = "POST"
 				input.path = FakeTestURL
+				contains(input.body, "Whatever")
 			}
 			`,
 			StartOpa: true,

@@ -151,7 +151,10 @@ func NewProxy(config *config.Config, log *zap.Logger, upstream reverseProxy) (*O
 		)
 	}
 
-	svc.Upstream = upstream
+	if upstream != nil {
+		svc.Upstream = upstream
+	}
+
 	// are we running in forwarding mode?
 	if config.EnableForwarding {
 		if err := svc.createForwardingProxy(); err != nil {

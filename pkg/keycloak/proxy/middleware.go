@@ -16,9 +16,11 @@ limitations under the License.
 package proxy
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -470,7 +472,8 @@ func authenticationMiddleware(
 				}
 			}
 
-			next.ServeHTTP(wrt, req.WithContext(ctx))
+			*req = *(req.WithContext(ctx))
+			next.ServeHTTP(wrt, req)
 		})
 	}
 }
@@ -617,12 +620,29 @@ func authorizationMiddleware(
 					}
 				}
 			} else if enableOpa {
-				provider = authorization.NewOpaAuthorizationProvider(
-					opaTimeout,
-					*opaAuthzURL,
-					req,
-				)
-				decision, err = provider.Authorize()
+				// initially request Body is stream read from network connection,
+				// when read once, it is closed, so second time we would not be able to
+				// read it, so what we will do here is that we will read body,
+				// create copy of original request and pass body which we already read
+				// to original req and to new copy of request,
+				// new copy will be passed to authorizer, which also needs to read body
+				reqBody, varErr := io.ReadAll(req.Body)
+				if varErr != nil {
+					decision = authorization.DeniedAuthz
+					err = varErr
+				} else {
+					req.Body.Close()
+					passReq := *req
+					passReq.Body = io.NopCloser(bytes.NewReader(reqBody))
+					req.Body = io.NopCloser(bytes.NewReader(reqBody))
+
+					provider = authorization.NewOpaAuthorizationProvider(
+						opaTimeout,
+						*opaAuthzURL,
+						&passReq,
+					)
+					decision, err = provider.Authorize()
+				}
 			}
 
 			switch err {
@@ -673,7 +693,6 @@ func authorizationMiddleware(
 				next.ServeHTTP(wrt, req.WithContext(accessForbidden(wrt, req)))
 				return
 			}
-
 			next.ServeHTTP(wrt, req)
 		})
 	}
