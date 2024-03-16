@@ -2210,10 +2210,11 @@ func TestGzipCompression(t *testing.T) {
 			ProxySettings: func(c *config.Config) {
 				c.EnableCompression = true
 				c.EnableLogging = true
+				c.Upstream = server.URL
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URL:                     server.URL + FakeTestURL,
+					URI:                     FakeTestURL,
 					ProxyRequest:            true,
 					ExpectedProxy:           true,
 					ExpectedCode:            http.StatusOK,
