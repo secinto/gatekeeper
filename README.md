@@ -19,13 +19,21 @@ Please remember to provide a good summary, description as well as steps to repro
 
 ## Getting started
 
-To run Gatekeeper, you can build it using `static` target in Makefile (`make static`) or you can use the Docker image by running:
+To run Gatekeeper, you can build it using this command:
 
-    docker run -it --rm quay.io/gogatekeeper/gatekeeper:2.9.5 \
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 -t quay.io/gogatekeeper/gatekeeper:2.9.5 .
+```
+
+or you can use aleady existing Docker image by running:
+
+```bash
+docker run -it --rm quay.io/gogatekeeper/gatekeeper:2.9.5 \
       --listen 127.0.0.1:8080 \
       --upstream-url http://127.0.0.1:80 \
       --discovery-url https://keycloak.example.com/realms/<REALM_NAME> \
       --client-id <CLIENT_ID>
+```
 
 For more details refer to the [Documentation](docs/user-guide.md).
 
