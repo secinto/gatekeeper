@@ -1971,6 +1971,17 @@ func TestExternalAuthzValid(t *testing.T) {
 			Valid: true,
 		},
 		{
+			Name: "ConflictIdpSessionCheckEnableUma",
+			Config: &Config{
+				EnableUma:             true,
+				ClientID:              "test",
+				ClientSecret:          "test",
+				NoRedirects:           true,
+				EnableIDPSessionCheck: true,
+			},
+			Valid: false,
+		},
+		{
 			Name: "MissingClientID",
 			Config: &Config{
 				EnableUma:    true,

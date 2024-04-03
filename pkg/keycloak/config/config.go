@@ -888,6 +888,9 @@ func (r *Config) isExternalAuthzValid() error {
 		if r.ClientID == "" || r.ClientSecret == "" {
 			return apperrors.ErrMissingClientCredsWithUMA
 		}
+		if r.EnableIDPSessionCheck {
+			return apperrors.ErrEnableUmaIdpSessionCheckConflict
+		}
 	} else if r.EnableOpa {
 		authzURL, err := url.ParseRequestURI(r.OpaAuthzURI)
 
