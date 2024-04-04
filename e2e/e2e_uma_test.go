@@ -40,7 +40,6 @@ var _ = Describe("UMA Code Flow authorization", func() {
 			"--skip-access-token-issuer-check=true",
 			"--openid-provider-retry-count=30",
 			"--secure-cookie=false",
-			"--enable-idp-session-check=false",
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -137,7 +136,6 @@ var _ = Describe("UMA Code Flow authorization with method scope", func() {
 			"--secure-cookie=false",
 			"--verbose=true",
 			"--enable-logging=true",
-			"--enable-idp-session-check=false",
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -377,7 +375,6 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 			"--secure-cookie=false",
 			"--verbose=true",
 			"--enable-logging=true",
-			"--enable-idp-session-check=false",
 		}
 
 		osArgs = append(osArgs, proxyArgs...)

@@ -140,7 +140,7 @@ var (
 		"only one type of external authz can be enabled at once",
 	)
 	ErrMissingClientCredsWithUMA        = errors.New("enable uma requires client credentials")
-	ErrEnableUmaIdpSessionCheckConflict = errors.New("you cannot have enable uma together with enable idp session check")
+	ErrEnableUmaIdpSessionCheckConflict = errors.New("you cannot have enable uma together with enable idp session check and noredirects")
 	ErrTooManyDefaultDenyOpts           = errors.New(
 		"only one of enable-default-deny/enable-default-deny-strict can be true",
 	)
