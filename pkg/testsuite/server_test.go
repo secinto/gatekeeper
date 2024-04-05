@@ -19,7 +19,9 @@ limitations under the License.
 package testsuite
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -211,7 +213,37 @@ func TestAuthTokenHeader(t *testing.T) {
 }
 
 func TestForwardingProxy(t *testing.T) {
-	server := httptest.NewServer(&FakeUpstreamService{})
+	errChan := make(chan error)
+	upProxy, lstn, err := createTestProxy()
+	upstreamProxyURL := fmt.Sprintf("http://%s", lstn.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	go func() {
+		errChan <- upProxy.Serve(lstn)
+	}()
+
+	fakeUpstream := httptest.NewServer(&FakeUpstreamService{})
+	upstreamConfig := newFakeKeycloakConfig()
+	upstreamConfig.EnableUma = true
+	upstreamConfig.NoRedirects = true
+	upstreamConfig.EnableDefaultDeny = true
+	upstreamConfig.ClientID = ValidUsername
+	upstreamConfig.ClientSecret = ValidPassword
+	upstreamConfig.PatRetryCount = 5
+	upstreamConfig.PatRetryInterval = 2 * time.Second
+	upstreamConfig.Upstream = fakeUpstream.URL
+	// in newFakeProxy we are creating fakeauth server so, we will
+	// have two different fakeauth servers for upstream and forwarding,
+	// so we need to skip issuer check, but responses will be same
+	// so it is ok for this testing
+	upstreamConfig.SkipAccessTokenIssuerCheck = true
+
+	upstreamProxy := newFakeProxy(
+		upstreamConfig,
+		&fakeAuthConfig{Expiration: 900 * time.Millisecond},
+	)
 
 	testCases := []struct {
 		Name              string
@@ -232,7 +264,7 @@ func TestForwardingProxy(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URL:                     server.URL + FakeTestURL,
+					URL:                     upstreamProxy.getServiceURL() + FakeTestURL,
 					ProxyRequest:            true,
 					ExpectedProxy:           true,
 					ExpectedCode:            http.StatusOK,
@@ -253,7 +285,7 @@ func TestForwardingProxy(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URL:                     server.URL + FakeTestURL,
+					URL:                     upstreamProxy.getServiceURL() + FakeTestURL,
 					ProxyRequest:            true,
 					ExpectedProxy:           true,
 					ExpectedCode:            http.StatusOK,
@@ -261,7 +293,7 @@ func TestForwardingProxy(t *testing.T) {
 					ExpectedContentContains: "Bearer ey",
 				},
 				{
-					URL:                     server.URL + FakeTestURL,
+					URL:                     upstreamProxy.getServiceURL() + FakeTestURL,
 					ProxyRequest:            true,
 					ExpectedProxy:           true,
 					ExpectedCode:            http.StatusOK,
@@ -282,11 +314,21 @@ func TestForwardingProxy(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URL:                     server.URL + FakeTestURL,
+					URL:                     upstreamProxy.getServiceURL() + FakeTestURL,
 					ProxyRequest:            true,
 					ExpectedProxy:           true,
 					ExpectedCode:            http.StatusOK,
 					ExpectedContentContains: "Bearer ey",
+					Method:                  "POST",
+					FormValues: map[string]string{
+						"Name": "Whatever",
+					},
+					ExpectedContent: func(body string, testNum int) {
+						assert.Contains(t, body, FakeTestURL)
+						assert.Contains(t, body, "method")
+						assert.Contains(t, body, "Whatever")
+						assert.NotContains(t, body, TestProxyHeaderVal)
+					},
 				},
 			},
 		},
@@ -303,7 +345,7 @@ func TestForwardingProxy(t *testing.T) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URL:                     server.URL + FakeTestURL,
+					URL:                     upstreamProxy.getServiceURL() + FakeTestURL,
 					ProxyRequest:            true,
 					ExpectedProxy:           true,
 					ExpectedCode:            http.StatusOK,
@@ -311,11 +353,44 @@ func TestForwardingProxy(t *testing.T) {
 					ExpectedContentContains: "Bearer ey",
 				},
 				{
-					URL:                     server.URL + FakeTestURL,
+					URL:                     upstreamProxy.getServiceURL() + FakeTestURL,
 					ProxyRequest:            true,
 					ExpectedProxy:           true,
 					ExpectedCode:            http.StatusOK,
 					ExpectedContentContains: "Bearer ey",
+				},
+			},
+		},
+		{
+			// forwardingProxy -> middleProxy -> our backend upstreamProxy
+			Name: "TestClientCredentialsGrantWithMiddleProxy",
+			ProxySettings: func(conf *config.Config) {
+				conf.EnableForwarding = true
+				conf.ForwardingDomains = []string{}
+				conf.ClientID = ValidUsername
+				conf.ClientSecret = ValidPassword
+				conf.ForwardingGrantType = configcore.GrantTypeClientCreds
+				conf.PatRetryCount = 5
+				conf.PatRetryInterval = 2 * time.Second
+				conf.UpstreamProxy = upstreamProxyURL
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URL:                     upstreamProxy.getServiceURL() + FakeTestURL,
+					ProxyRequest:            true,
+					ExpectedProxy:           true,
+					ExpectedCode:            http.StatusOK,
+					ExpectedContentContains: "Bearer ey",
+					Method:                  "POST",
+					FormValues: map[string]string{
+						"Name": "Whatever",
+					},
+					ExpectedContent: func(body string, testNum int) {
+						assert.Contains(t, body, FakeTestURL)
+						assert.Contains(t, body, "method")
+						assert.Contains(t, body, "Whatever")
+						assert.Contains(t, body, TestProxyHeaderVal)
+					},
 				},
 			},
 		},
@@ -326,14 +401,32 @@ func TestForwardingProxy(t *testing.T) {
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
-				c := newFakeKeycloakConfig()
-				c.Upstream = server.URL
-				testCase.ProxySettings(c)
-				p := newFakeProxy(c, &fakeAuthConfig{Expiration: 900 * time.Millisecond})
+				forwardingConfig := newFakeKeycloakConfig()
+
+				testCase.ProxySettings(forwardingConfig)
+				forwardingProxy := newFakeProxy(
+					forwardingConfig,
+					&fakeAuthConfig{},
+				)
+
 				<-time.After(time.Duration(100) * time.Millisecond)
-				p.RunTests(t, testCase.ExecutionSettings)
+				forwardingProxy.RunTests(t, testCase.ExecutionSettings)
 			},
 		)
+	}
+
+	select {
+	case err = <-errChan:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Fatal(errors.Join(ErrRunHTTPServer, err))
+		}
+	default:
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err = upProxy.Shutdown(ctx)
+		if err != nil {
+			t.Fatal(errors.Join(ErrShutHTTPServer, err))
+		}
 	}
 }
 
@@ -447,7 +540,6 @@ func TestUmaForwardingProxy(t *testing.T) {
 			testCase.Name,
 			func(t *testing.T) {
 				forwardingConfig := newFakeKeycloakConfig()
-				forwardingConfig.Upstream = upstreamProxy.getServiceURL()
 
 				testCase.ProxySettings(forwardingConfig)
 				forwardingProxy := newFakeProxy(
@@ -2053,5 +2145,102 @@ func TestCustomHTTPMethod(t *testing.T) {
 				p.RunTests(t, testCase.ExecutionSettings)
 			},
 		)
+	}
+}
+
+func TestUpstreamProxy(t *testing.T) {
+	errChan := make(chan error)
+	upstream := httptest.NewServer(&FakeUpstreamService{})
+	upstreamProxy, lstn, err := createTestProxy()
+	upstreamProxyURL := fmt.Sprintf("http://%s", lstn.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	go func() {
+		errChan <- upstreamProxy.Serve(lstn)
+	}()
+
+	testCases := []struct {
+		Name              string
+		ProxySettings     func(c *config.Config)
+		ExecutionSettings []fakeRequest
+	}{
+		{
+			Name: "TestUpstreamProxy",
+			ProxySettings: func(c *config.Config) {
+				c.UpstreamProxy = upstreamProxyURL
+				c.Upstream = upstream.URL
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:    "/test",
+					Method: "POST",
+					FormValues: map[string]string{
+						"Name": "Whatever",
+					},
+					ExpectedProxy:           true,
+					ExpectedCode:            http.StatusOK,
+					ExpectedContentContains: "gzip",
+					ExpectedContent: func(body string, testNum int) {
+						assert.Contains(t, body, FakeTestURL)
+						assert.Contains(t, body, "method")
+						assert.Contains(t, body, "Whatever")
+						assert.Contains(t, body, TestProxyHeaderVal)
+					},
+				},
+			},
+		},
+		{
+			Name: "TestNoUpstreamProxy",
+			ProxySettings: func(c *config.Config) {
+				c.Upstream = upstream.URL
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:    FakeTestURL,
+					Method: "POST",
+					FormValues: map[string]string{
+						"Name": "Whatever",
+					},
+					ExpectedProxy:           true,
+					ExpectedCode:            http.StatusOK,
+					ExpectedContentContains: "gzip",
+					ExpectedContent: func(body string, testNum int) {
+						assert.Contains(t, body, FakeTestURL)
+						assert.Contains(t, body, "method")
+						assert.Contains(t, body, "Whatever")
+						assert.NotContains(t, body, TestProxyHeaderVal)
+					},
+				},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				c := newFakeKeycloakConfig()
+				testCase.ProxySettings(c)
+				p := newFakeProxy(c, &fakeAuthConfig{})
+				p.RunTests(t, testCase.ExecutionSettings)
+			},
+		)
+	}
+
+	select {
+	case err = <-errChan:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			t.Fatal(errors.Join(ErrRunHTTPServer, err))
+		}
+	default:
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err = upstreamProxy.Shutdown(ctx)
+		if err != nil {
+			t.Fatal(errors.Join(ErrShutHTTPServer, err))
+		}
 	}
 }

@@ -75,6 +75,8 @@ type Config struct {
 	OpenIDProviderRetryCount int `env:"OPENID_PROVIDER_RETRY_COUNT" json:"openid-provider-retry-count" usage:"number of retries for retrieving openid configuration" yaml:"openid-provider-retry-count"`
 	// OpenIDProviderHeaders
 	OpenIDProviderHeaders map[string]string `json:"openid-provider-headers" usage:"http headers sent to idp provider" yaml:"openid-provider-headers"`
+	// UpstreamProxy proxy for upstream communication
+	UpstreamProxy string `env:"UPSTREAM_PROXY" json:"upstream-proxy" usage:"proxy for communication with upstream" yaml:"upstream-proxy"`
 	// BaseURI is prepended to all the generated URIs
 	BaseURI string `env:"BASE_URI" json:"base-uri" usage:"common prefix for all URIs" yaml:"base-uri"`
 	// OAuthURI is the uri for the oauth endpoints for the proxy

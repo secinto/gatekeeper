@@ -1259,7 +1259,6 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 	// and for refreshed cookies (htts://github.com/louketo/louketo-proxy/pulls/456])
 	proxy.KeepDestinationHeaders = true
 	proxy.Logger = httplog.New(io.Discard, "", 0)
-	proxy.KeepDestinationHeaders = true
 	r.Upstream = proxy
 
 	// update the tls configuration of the reverse proxy
@@ -1269,8 +1268,15 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 		return apperrors.ErrAssertionFailed
 	}
 
+	var upstreamProxyFunc func(*http.Request) (*url.URL, error)
+	if r.Config.UpstreamProxy != "" {
+		upstreamProxyFunc = func(req *http.Request) (*url.URL, error) {
+			return url.Parse(r.Config.UpstreamProxy)
+		}
+	}
 	upstreamProxy.Tr = &http.Transport{
 		Dial:                  dialer,
+		Proxy:                 upstreamProxyFunc,
 		DisableKeepAlives:     !r.Config.UpstreamKeepalives,
 		ExpectContinueTimeout: r.Config.UpstreamExpectContinueTimeout,
 		ResponseHeaderTimeout: r.Config.UpstreamResponseHeaderTimeout,

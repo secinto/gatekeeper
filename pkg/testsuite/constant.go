@@ -23,6 +23,10 @@ const (
 	FakeCertFilePrefix     = "/gateadmin_crt_"
 	FakePrivFilePrefix     = "/gateadmin_priv_"
 	FakeCaFilePrefix       = "/gateadmin_ca_"
+	TestProxyHeaderKey     = "X-GoProxy"
+	TestProxyHeaderVal     = "yxorPoG-X"
 )
 
 var ErrCreateFakeProxy = errors.New("failed to create fake proxy service")
+var ErrRunHTTPServer = errors.New("failed to run http server")
+var ErrShutHTTPServer = errors.New("failed to shutdown http server")
