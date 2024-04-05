@@ -3,11 +3,9 @@ package testsuite
 import (
 	"encoding/json"
 	"io"
-	"net"
 	"net/http"
 	"strings"
 
-	"github.com/elazarl/goproxy"
 	"golang.org/x/net/websocket"
 )
 
@@ -72,20 +70,22 @@ func (f *FakeUpstreamService) ServeHTTP(wrt http.ResponseWriter, req *http.Reque
 	}
 }
 
-func createTestProxy() (*http.Server, net.Listener, error) {
-	proxy := goproxy.NewProxyHttpServer()
-	proxy.OnRequest().DoFunc(
-		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
-			r.Header.Set(TestProxyHeaderKey, TestProxyHeaderVal)
-			return r, nil
-		},
-	)
-	proxyHTTPServer := &http.Server{
-		Handler: proxy,
-	}
-	ln, err := net.Listen("tcp", randomLocalHost)
-	if err != nil {
-		return nil, nil, err
-	}
-	return proxyHTTPServer, ln, nil
-}
+// commented out see TestUpstreamProxy test comment
+// func createTestProxy() (*http.Server, net.Listener, error) {
+// 	proxy := goproxy.NewProxyHttpServer()
+// 	proxy.OnRequest().DoFunc(
+// 		func(r *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+// 			r.Header.Set(TestProxyHeaderKey, TestProxyHeaderVal)
+// 			return r, nil
+// 		},
+// 	)
+// 	proxyHTTPServer := &http.Server{
+// 		Handler: proxy,
+// 	}
+// 	ln, err := net.Listen("tcp", randomLocalHost)
+// 	if err != nil {
+//nolint:dupword
+// 		return nil, nil, err
+// 	}
+// 	return proxyHTTPServer, ln, nil
+// }

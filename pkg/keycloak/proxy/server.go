@@ -32,6 +32,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/http/httpproxy"
+
 	"go.uber.org/zap/zapcore"
 
 	"golang.org/x/crypto/acme/autocert"
@@ -1270,8 +1272,15 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 
 	var upstreamProxyFunc func(*http.Request) (*url.URL, error)
 	if r.Config.UpstreamProxy != "" {
+		prConfig := httpproxy.Config{
+			HTTPProxy:  r.Config.UpstreamProxy,
+			HTTPSProxy: r.Config.UpstreamProxy,
+		}
+		if r.Config.UpstreamNoProxy != "" {
+			prConfig.NoProxy = r.Config.UpstreamNoProxy
+		}
 		upstreamProxyFunc = func(req *http.Request) (*url.URL, error) {
-			return url.Parse(r.Config.UpstreamProxy)
+			return prConfig.ProxyFunc()(req.URL)
 		}
 	}
 	upstreamProxy.Tr = &http.Transport{
