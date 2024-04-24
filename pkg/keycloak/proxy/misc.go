@@ -271,26 +271,33 @@ func GetAccessCookieExpiration(
 }
 
 //nolint:cyclop
-func (r *OauthProxy) getPAT(done chan bool) {
+func getPAT(
+	logger *zap.Logger,
+	pat *PAT,
+	clientID string,
+	clientSecret string,
+	realm string,
+	openIDProviderTimeout time.Duration,
+	patRetryCount int,
+	patRetryInterval time.Duration,
+	enableForwarding bool,
+	forwardingGrantType string,
+	idpClient *gocloak.GoCloak,
+	forwardingUsername string,
+	forwardingPassword string,
+	done chan bool,
+) {
 	retry := 0
-	r.pat = &PAT{}
 	initialized := false
-	rConfig := *r.Config
-	clientID := rConfig.ClientID
-	clientSecret := rConfig.ClientSecret
-	realm := rConfig.Realm
-	timeout := rConfig.OpenIDProviderTimeout
-	patRetryCount := rConfig.PatRetryCount
-	patRetryInterval := rConfig.PatRetryInterval
 	grantType := configcore.GrantTypeClientCreds
 
-	if rConfig.EnableForwarding && rConfig.ForwardingGrantType == configcore.GrantTypeUserCreds {
+	if enableForwarding && forwardingGrantType == configcore.GrantTypeUserCreds {
 		grantType = configcore.GrantTypeUserCreds
 	}
 
 	for {
 		if retry > 0 {
-			r.Log.Info(
+			logger.Info(
 				"retrying fetching PAT token",
 				zap.Int("retry", retry),
 			)
@@ -298,7 +305,7 @@ func (r *OauthProxy) getPAT(done chan bool) {
 
 		ctx, cancel := context.WithTimeout(
 			context.Background(),
-			timeout,
+			openIDProviderTimeout,
 		)
 
 		var token *gocloak.JWT
@@ -306,23 +313,23 @@ func (r *OauthProxy) getPAT(done chan bool) {
 
 		switch grantType {
 		case configcore.GrantTypeClientCreds:
-			token, err = r.IdpClient.LoginClient(
+			token, err = idpClient.LoginClient(
 				ctx,
 				clientID,
 				clientSecret,
 				realm,
 			)
 		case configcore.GrantTypeUserCreds:
-			token, err = r.IdpClient.Login(
+			token, err = idpClient.Login(
 				ctx,
 				clientID,
 				clientSecret,
 				realm,
-				rConfig.ForwardingUsername,
-				rConfig.ForwardingPassword,
+				forwardingUsername,
+				forwardingPassword,
 			)
 		default:
-			r.Log.Error(
+			logger.Error(
 				"Chosen grant type is not supported",
 				zap.String("grant_type", grantType),
 			)
@@ -331,7 +338,7 @@ func (r *OauthProxy) getPAT(done chan bool) {
 
 		if err != nil {
 			retry++
-			r.Log.Error("problem getting PAT token", zap.Error(err))
+			logger.Error("problem getting PAT token", zap.Error(err))
 
 			if retry >= patRetryCount {
 				cancel()
@@ -342,9 +349,9 @@ func (r *OauthProxy) getPAT(done chan bool) {
 			continue
 		}
 
-		r.pat.m.Lock()
-		r.pat.Token = token
-		r.pat.m.Unlock()
+		pat.m.Lock()
+		pat.Token = token
+		pat.m.Unlock()
 
 		if !initialized {
 			done <- true
@@ -353,31 +360,27 @@ func (r *OauthProxy) getPAT(done chan bool) {
 		initialized = true
 
 		parsedToken, err := jwt.ParseSigned(token.AccessToken)
-
 		if err != nil {
 			retry++
-			r.Log.Error("failed to parse the access token", zap.Error(err))
+			logger.Error("failed to parse the access token", zap.Error(err))
 			<-time.After(patRetryInterval)
 			continue
 		}
 
 		stdClaims := &jwt.Claims{}
-
 		err = parsedToken.UnsafeClaimsWithoutVerification(stdClaims)
-
 		if err != nil {
 			retry++
-			r.Log.Error("unable to parse access token for claims", zap.Error(err))
+			logger.Error("unable to parse access token for claims", zap.Error(err))
 			<-time.After(patRetryInterval)
 			continue
 		}
 
 		retry = 0
 		expiration := stdClaims.Expiry.Time()
-
 		refreshIn := utils.GetWithin(expiration, 0.85)
 
-		r.Log.Info(
+		logger.Info(
 			"waiting for expiration of access token",
 			zap.Float64("refresh_in", refreshIn.Seconds()),
 		)

@@ -33,8 +33,8 @@ import (
 )
 
 // newOauthProxyApp creates a new cli application and runs it
-func NewOauthProxyApp() *cli.App {
-	cfg := config.ProduceConfig(proxycore.Provider)
+func NewOauthProxyApp[T proxycore.KeycloakProvider | proxycore.GoogleProvider](provider T) *cli.App {
+	cfg := config.ProduceConfig(provider)
 	app := cli.NewApp()
 	// we had to set this after upgrade from urvafe v1 to v2
 	app.DisableSliceFlagSeparator = true

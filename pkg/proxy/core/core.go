@@ -6,12 +6,14 @@ import (
 	"time"
 )
 
+type KeycloakProvider string
+type GoogleProvider string
+
 var (
 	release  = ""
 	gitsha   = "no gitsha provided"
 	compiled = "0"
 	Version  = ""
-	Provider = "keycloak"
 )
 
 // GetVersion returns the proxy version

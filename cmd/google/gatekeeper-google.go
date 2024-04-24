@@ -13,22 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package config
+package main
 
 import (
-	"github.com/gogatekeeper/gatekeeper/pkg/config/core"
-	googleconfig "github.com/gogatekeeper/gatekeeper/pkg/google/config"
-	keycloakconfig "github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
-	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
+	"os"
+
+	googlecore "github.com/gogatekeeper/gatekeeper/pkg/google/proxy/core"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy"
 )
 
-func ProduceConfig[T proxycore.KeycloakProvider | proxycore.GoogleProvider](provider T) core.Configs {
-	switch provider {
-	case "keycloak":
-		return keycloakconfig.NewDefaultConfig()
-	case "google":
-		return googleconfig.NewDefaultConfig()
-	default:
-		return keycloakconfig.NewDefaultConfig()
-	}
+func main() {
+	app := proxy.NewOauthProxyApp(googlecore.Provider)
+	_ = app.Run(os.Args)
 }

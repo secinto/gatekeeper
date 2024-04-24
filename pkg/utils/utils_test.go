@@ -31,6 +31,7 @@ import (
 	uuid "github.com/gofrs/uuid"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDecodeKeyPairs(t *testing.T) {
@@ -329,9 +330,9 @@ func BenchmarkContainsSubString(t *testing.B) {
 }
 
 func TestDialAddress(t *testing.T) {
-	assert.Equal(t, DialAddress(getFakeURL("http://127.0.0.1")), "127.0.0.1:80")
-	assert.Equal(t, DialAddress(getFakeURL("https://127.0.0.1")), "127.0.0.1:443")
-	assert.Equal(t, DialAddress(getFakeURL("http://127.0.0.1:8080")), "127.0.0.1:8080")
+	assert.Equal(t, "127.0.0.1:80", DialAddress(getFakeURL("http://127.0.0.1")))
+	assert.Equal(t, "127.0.0.1:443", DialAddress(getFakeURL("https://127.0.0.1")))
+	assert.Equal(t, "127.0.0.1:8080", DialAddress(getFakeURL("http://127.0.0.1:8080")))
 }
 
 func TestIsUpgradedConnection(t *testing.T) {
@@ -550,11 +551,11 @@ func TestGetRefreshTokenFromCookie(t *testing.T) {
 		token, err := GetRefreshTokenFromCookie(req, constant.RefreshCookie)
 		switch testCase.Ok {
 		case true:
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotEmpty(t, token)
 			assert.Equal(t, testCase.Expected, token)
 		default:
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Empty(t, token)
 		}
 	}

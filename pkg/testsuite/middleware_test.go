@@ -26,6 +26,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -192,9 +193,9 @@ func TestAdminListener(t *testing.T) {
 				conf.EnableMetrics = true
 				conf.ListenAdmin = "127.0.0.1:12301"
 				conf.ListenAdminScheme = constant.SecureScheme
-				conf.TLSAdminCertificate = fmt.Sprintf(os.TempDir()+FakeCertFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSAdminPrivateKey = fmt.Sprintf(os.TempDir()+FakePrivFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSAdminCaCertificate = fmt.Sprintf(os.TempDir()+FakeCaFilePrefix+"%d", rand.Intn(10000))
+				conf.TLSAdminCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSAdminPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSAdminCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -218,9 +219,9 @@ func TestAdminListener(t *testing.T) {
 				conf.EnableMetrics = true
 				conf.ListenAdmin = "127.0.0.1:12302"
 				conf.ListenAdminScheme = constant.SecureScheme
-				conf.TLSCertificate = fmt.Sprintf(os.TempDir()+FakeCertFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSPrivateKey = fmt.Sprintf(os.TempDir()+FakePrivFilePrefix+"%d", rand.Intn(10000))
-				conf.TLSCaCertificate = fmt.Sprintf(os.TempDir()+FakeCaFilePrefix+"%d", rand.Intn(10000))
+				conf.TLSCertificate = os.TempDir() + FakeCertFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
+				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 			},
 			ExecutionSettings: []fakeRequest{
 				{

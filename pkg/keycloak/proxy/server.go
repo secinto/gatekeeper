@@ -136,7 +136,23 @@ func NewProxy(config *config.Config, log *zap.Logger, upstream reverseProxy) (*O
 
 	if config.EnableUma || config.EnableForwarding {
 		patDone := make(chan bool)
-		go svc.getPAT(patDone)
+		svc.pat = &PAT{}
+		go getPAT(
+			log,
+			svc.pat,
+			config.ClientID,
+			config.ClientSecret,
+			config.Realm,
+			config.OpenIDProviderTimeout,
+			config.PatRetryCount,
+			config.PatRetryInterval,
+			config.EnableForwarding,
+			config.ForwardingGrantType,
+			svc.IdpClient,
+			config.ForwardingUsername,
+			config.ForwardingPassword,
+			patDone,
+		)
 		<-patDone
 	}
 
