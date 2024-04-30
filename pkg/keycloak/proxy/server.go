@@ -365,6 +365,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.NoProxy,
 		r.Config.BaseURI,
 		r.Config.OAuthURI,
+		r.Config.AllowedQueryParams,
 	)
 
 	if r.Config.EnableHmac {
@@ -532,6 +533,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.newOAuth2Config,
 		r.getRedirectionURL,
 		r.customSignInPage,
+		r.Config.AllowedQueryParams,
 	)
 
 	// step: add the routing for oauth

@@ -106,6 +106,8 @@ func getRedirectionURL(
 }
 
 // oauthAuthorizationHandler is responsible for performing the redirection to oauth provider
+//
+//nolint:cyclop
 func oauthAuthorizationHandler(
 	logger *zap.Logger,
 	skipTokenVerification bool,
@@ -116,6 +118,7 @@ func oauthAuthorizationHandler(
 	newOAuth2Config func(redirectionURL string) *oauth2.Config,
 	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
 	customSignInPage func(wrt http.ResponseWriter, authURL string),
+	allowedQueryParams map[string]string,
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(wrt http.ResponseWriter, req *http.Request) {
 		if skipTokenVerification {
@@ -159,6 +162,26 @@ func oauthAuthorizationHandler(
 				oauth2.SetAuthURLParam(pkce.ParamCodeChallengeMethod, pkce.MethodS256),
 			)
 			cookManager.DropPKCECookie(wrt, codeVerifier)
+		}
+
+		if len(allowedQueryParams) > 0 {
+			for key, val := range allowedQueryParams {
+				if param := req.URL.Query().Get(key); param != "" {
+					if val != "" {
+						if val != param {
+							logger.Error(
+								apperrors.ErrQueryParamValueMismatch.Error(),
+								zap.String("param", key),
+							)
+							return
+						}
+					}
+					authCodeOptions = append(
+						authCodeOptions,
+						oauth2.SetAuthURLParam(key, param),
+					)
+				}
+			}
 		}
 
 		authURL := conf.AuthCodeURL(

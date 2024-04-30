@@ -240,6 +240,14 @@ func parseCLIOptions(cliCtx *cli.Context, config core.Configs) error {
 		utils.MergeMaps(config.GetHeaders(), headers)
 	}
 
+	if cliCtx.IsSet("allowed-query-params") {
+		headers, err := utils.DecodeKeyPairs(cliCtx.StringSlice("allowed-query-params"))
+		if err != nil {
+			return err
+		}
+		utils.MergeMaps(config.GetAllowedQueryParams(), headers)
+	}
+
 	if cliCtx.IsSet("resources") {
 		for _, x := range cliCtx.StringSlice("resources") {
 			resource, err := authorization.NewResource().Parse(x)

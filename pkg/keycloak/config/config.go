@@ -101,6 +101,8 @@ type Config struct {
 	ResponseHeaders map[string]string `json:"response-headers" usage:"custom headers to added to the http response key=value" yaml:"response-headers"`
 	// CustomHTTPMethods is a list of additional non-standard http methods. If additional method is required it has to explicitly allowed at resource allowed method definition.
 	CustomHTTPMethods []string `json:"custom-http-methods" usage:"list of additional non-standard http methods" yaml:"custom-http-methods"`
+	// Allowed Query Params sent to IDP
+	AllowedQueryParams map[string]string `json:"allowed-query-params" usage:"allowed query params, sent to IDP key=optional value" yaml:"allowed-query-params"`
 
 	// EnableSelfSignedTLS indicates we should create a self-signed ceritificate for the service
 	EnabledSelfSignedTLS bool `env:"ENABLE_SELF_SIGNED_TLS" json:"enable-self-signed-tls" usage:"create self signed certificates for the proxy" yaml:"enable-self-signed-tls"`
@@ -348,6 +350,7 @@ func NewDefaultConfig() *Config {
 		EnableIDPSessionCheck:         true,
 		HTTPOnlyCookie:                true,
 		Headers:                       make(map[string]string),
+		AllowedQueryParams:            make(map[string]string),
 		LetsEncryptCacheDir:           "./cache/",
 		MatchClaims:                   make(map[string]string),
 		MaxIdleConns:                  100,
@@ -404,6 +407,10 @@ func (r *Config) GetMatchClaims() map[string]string {
 
 func (r *Config) GetTags() map[string]string {
 	return r.Tags
+}
+
+func (r *Config) GetAllowedQueryParams() map[string]string {
+	return r.AllowedQueryParams
 }
 
 // readConfigFile reads and parses the configuration file

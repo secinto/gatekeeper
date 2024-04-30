@@ -34,6 +34,7 @@ var (
 	ErrPKCEWithCodeOnly                = errors.New("pkce can be enabled only with no-redirect=false")
 	ErrPKCECodeCreation                = errors.New("creation of code verifier failed")
 	ErrPKCECookieEmpty                 = errors.New("seems that pkce code verifier cookie value is empty string")
+	ErrQueryParamValueMismatch         = errors.New("query param value is not allowed")
 
 	ErrSessionExpiredVerifyOff  = errors.New("the session has expired and verification switch off")
 	ErrSessionExpiredRefreshOff = errors.New("session expired and access token refreshing is disabled")

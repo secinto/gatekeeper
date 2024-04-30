@@ -171,6 +171,8 @@ func WithOAuthURI(baseURI string, oauthURI string) func(uri string) string {
 }
 
 // redirectToAuthorization redirects the user to authorization handler
+//
+//nolint:cyclop
 func redirectToAuthorization(
 	logger *zap.Logger,
 	noRedirects bool,
@@ -179,6 +181,7 @@ func redirectToAuthorization(
 	noProxy bool,
 	baseURI string,
 	oAuthURI string,
+	allowedQueryParams map[string]string,
 ) func(wrt http.ResponseWriter, req *http.Request) context.Context {
 	return func(wrt http.ResponseWriter, req *http.Request) context.Context {
 		if noRedirects {
@@ -189,6 +192,22 @@ func redirectToAuthorization(
 		// step: add a state referrer to the authorization page
 		uuid := cookManager.DropStateParameterCookie(req, wrt)
 		authQuery := fmt.Sprintf("?state=%s", uuid)
+
+		if len(allowedQueryParams) > 0 {
+			query := ""
+			for key, val := range allowedQueryParams {
+				if param := req.URL.Query().Get(key); param != "" {
+					if val != "" {
+						if val != param {
+							wrt.WriteHeader(http.StatusForbidden)
+							return revokeProxy(logger, req)
+						}
+					}
+					query += fmt.Sprintf("&%s=%s", key, param)
+				}
+			}
+			authQuery += query
+		}
 
 		// step: if verification is switched off, we can't authorization
 		if skipTokenVerification {
