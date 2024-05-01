@@ -892,43 +892,146 @@ func TestAuthorizationURLWithSkipToken(t *testing.T) {
 }
 
 func TestAuthorizationURL(t *testing.T) {
-	requests := []fakeRequest{
+	cfg := newFakeKeycloakConfig()
+
+	testCases := []struct {
+		Name              string
+		ProxySettings     func(c *config.Config)
+		ExecutionSettings []fakeRequest
+	}{
 		{
-			URI:              FakeAdminURL,
-			Redirects:        true,
-			ExpectedLocation: "/oauth/authorize?state",
-			ExpectedCode:     http.StatusSeeOther,
+			Name: "TestRedirectsToAuthorization",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = false
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:              FakeAdminURL,
+					Redirects:        true,
+					ExpectedLocation: "/oauth/authorize?state",
+					ExpectedCode:     http.StatusSeeOther,
+				},
+				{
+					URI:              "/admin/test",
+					Redirects:        true,
+					ExpectedLocation: "/oauth/authorize?state",
+					ExpectedCode:     http.StatusSeeOther,
+				},
+				{
+					URI:              "/help/../admin",
+					Redirects:        true,
+					ExpectedLocation: "/oauth/authorize?state",
+					ExpectedCode:     http.StatusSeeOther,
+				},
+				{
+					URI:              "/admin?test=yes&test1=test",
+					Redirects:        true,
+					ExpectedLocation: "/oauth/authorize?state",
+					ExpectedCode:     http.StatusSeeOther,
+				},
+				{
+					URI:          "/oauth/test",
+					Redirects:    true,
+					ExpectedCode: http.StatusNotFound,
+				},
+				{
+					URI:          "/oauth/callback/..//test",
+					Redirects:    true,
+					ExpectedCode: http.StatusNotFound,
+				},
+			},
 		},
 		{
-			URI:              "/admin/test",
-			Redirects:        true,
-			ExpectedLocation: "/oauth/authorize?state",
-			ExpectedCode:     http.StatusSeeOther,
+			Name: "TestQueryParamsOneKey",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = false
+				conf.AllowedQueryParams = map[string]string{
+					"test": "",
+				}
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:              "/admin?test1=test&test=yes",
+					Redirects:        true,
+					ExpectedLocation: "test=yes",
+					ExpectedCode:     http.StatusSeeOther,
+				},
+			},
 		},
 		{
-			URI:              "/help/../admin",
-			Redirects:        true,
-			ExpectedLocation: "/oauth/authorize?state",
-			ExpectedCode:     http.StatusSeeOther,
+			Name: "TestQueryParamsOneKeyValue",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = false
+				conf.AllowedQueryParams = map[string]string{
+					"test": "yes",
+				}
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:              "/admin?test1=test&test=yes",
+					Redirects:        true,
+					ExpectedLocation: "test=yes",
+					ExpectedHeadersValidator: map[string]func(*testing.T, *config.Config, string){
+						"Location": func(t *testing.T, c *config.Config, value string) {
+							assert.NotContains(t, value, "test1=test")
+						},
+					},
+					ExpectedCode: http.StatusSeeOther,
+				},
+			},
 		},
 		{
-			URI:              "/admin?test=yes&test1=test",
-			Redirects:        true,
-			ExpectedLocation: "/oauth/authorize?state",
-			ExpectedCode:     http.StatusSeeOther,
+			Name: "TestQueryParamsOneKeyInvalidValue",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = false
+				conf.AllowedQueryParams = map[string]string{
+					"test": "yess",
+				}
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:          "/admin?test1=test&test=yes",
+					Redirects:    true,
+					ExpectedCode: http.StatusForbidden,
+				},
+			},
 		},
 		{
-			URI:          "/oauth/test",
-			Redirects:    true,
-			ExpectedCode: http.StatusNotFound,
-		},
-		{
-			URI:          "/oauth/callback/..//test",
-			Redirects:    true,
-			ExpectedCode: http.StatusNotFound,
+			Name: "TestQueryParamsMultipleKeyValue",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = false
+				conf.AllowedQueryParams = map[string]string{
+					"test":  "yes",
+					"test1": "test",
+				}
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:       "/admin?test1=test&test=yes",
+					Redirects: true,
+					ExpectedHeadersValidator: map[string]func(*testing.T, *config.Config, string){
+						"Location": func(t *testing.T, c *config.Config, value string) {
+							assert.Contains(t, value, "test1=test")
+							assert.Contains(t, value, "test=yes")
+						},
+					},
+					ExpectedCode: http.StatusSeeOther,
+				},
+			},
 		},
 	}
-	newFakeProxy(nil, &fakeAuthConfig{}).RunTests(t, requests)
+
+	for _, testCase := range testCases {
+		testCase := testCase
+		cfg := *cfg
+		t.Run(
+			testCase.Name,
+			func(t *testing.T) {
+				testCase.ProxySettings(&cfg)
+				newFakeProxy(&cfg, &fakeAuthConfig{}).RunTests(t, testCase.ExecutionSettings)
+			},
+		)
+	}
 }
 
 func TestCallbackURL(t *testing.T) {

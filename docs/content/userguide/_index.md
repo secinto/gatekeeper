@@ -293,6 +293,25 @@ There are two parameters which you can use to set up cookie names for access tok
 --cookie-refresh-name=myRefreshTokenCookie
 ```
 
+## Allowed Query Params for Authentication
+
+Sometimes you may want to pass some query params to IDP e.g. `kc_idp_hint` or `ui_locales` etc...Gatekeeper provides param `allowed-query-params`
+where you can specify which query params will be forwarded to IDP
+
+This example will allow passing myparam and yourparam with any value to IDP:
+
+```
+  --allowed-query-params="myparam=" \
+  --allowed-query-params="yourparam="
+```
+
+This example will allow passing myparam and yourparam only with specified value:
+
+```
+  --allowed-query-params="myparam=myvalue" \
+  --allowed-query-params="yourparam=yourvalue"
+```
+
 ## TCP proxy with HTTP CONNECT
 
 You can protect your TCP services with gogatekeeper by adding `CONNECT` HTTP method to list of `custom-http-methods`. On client side you will need to pass of course token in `Authorization` header (righ now there are few clients which could make HTTP connect with `Bearer` token and then forward tcp, e.g. gost proxy - but only in static way, some IDE provide HTTP CONNECT functionality for db connectors but only with `Basic` authentication, we would like to add this functionality to gatekeeper in future). This setup will authenticate connection at start and will create tunnel to your backend service. Please use with care and ensure that it allows connection only to intended services, otherwise it can be missused for various attacks.

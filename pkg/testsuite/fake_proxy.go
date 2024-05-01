@@ -63,6 +63,7 @@ type fakeRequest struct {
 	ExpectedRequestError          string
 	ExpectedCookies               map[string]string
 	ExpectedHeaders               map[string]string
+	ExpectedHeadersValidator      map[string]func(*testing.T, *config.Config, string)
 	ExpectedLocation              string
 	ExpectedNoProxyHeaders        []string
 	ExpectedProxy                 bool
@@ -356,6 +357,24 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 					expVal,
 					realVal,
 				)
+			}
+		}
+
+		if reqCfg.ExpectedHeadersValidator != nil &&
+			len(reqCfg.ExpectedHeadersValidator) > 0 {
+			// comment
+			for headerName, headerValidator := range reqCfg.ExpectedHeadersValidator {
+				headers := resp.Header()
+				switch headerValidator {
+				case nil:
+					assert.NotNil(
+						t,
+						headerValidator,
+						"Validation function is nil, forgot to configure?",
+					)
+				default:
+					headerValidator(t, f.config, headers.Get(headerName))
+				}
 			}
 		}
 

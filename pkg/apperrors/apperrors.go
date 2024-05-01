@@ -147,4 +147,5 @@ var (
 	)
 	ErrHmacRequiresEncKey                   = errors.New("enable-hmac requires encryption key")
 	ErrPostLogoutRedirectURIRequiresIDToken = errors.New("post logout redirect uri requires id token, enable id token cookie")
+	ErrAllowedQueryParamsWithNoRedirects    = errors.New("allowed-query-params are not valid with noredirects=true")
 )

@@ -692,6 +692,7 @@ func (r *Config) isReverseProxySettingsValid() error {
 			r.isPostLoginRedirectValid,
 			r.isEnableHmacValid,
 			r.isPostLogoutRedirectURIValid,
+			r.isAllowedQueryParamsValid,
 		}
 
 		for _, validationFunc := range validationRegistry {
@@ -1009,6 +1010,13 @@ func (r *Config) isEnableHmacValid() error {
 func (r *Config) isPostLogoutRedirectURIValid() error {
 	if r.PostLogoutRedirectURI != "" && !r.EnableIDTokenCookie {
 		return apperrors.ErrPostLogoutRedirectURIRequiresIDToken
+	}
+	return nil
+}
+
+func (r *Config) isAllowedQueryParamsValid() error {
+	if len(r.AllowedQueryParams) > 0 && r.NoRedirects {
+		return apperrors.ErrAllowedQueryParamsWithNoRedirects
 	}
 	return nil
 }
