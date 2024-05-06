@@ -28,8 +28,8 @@ require (
 	github.com/unrolled/secure v1.0.8
 	github.com/urfave/cli/v2 v2.25.7
 	go.uber.org/zap v1.19.0
-	golang.org/x/crypto v0.21.0
-	golang.org/x/net v0.21.0
+	golang.org/x/crypto v0.23.0
+	golang.org/x/net v0.25.0
 	golang.org/x/oauth2 v0.14.0
 	gopkg.in/yaml.v2 v2.4.0
 )
@@ -138,8 +138,8 @@ require (
 	golang.org/x/arch v0.7.0 // indirect
 	golang.org/x/exp v0.0.0-20240213143201-ec583247a57a // indirect
 	golang.org/x/sync v0.6.0 // indirect
-	golang.org/x/sys v0.18.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/sys v0.20.0 // indirect
+	golang.org/x/text v0.15.0 // indirect
 	golang.org/x/tools v0.18.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240102182953-50ed04b92917 // indirect
