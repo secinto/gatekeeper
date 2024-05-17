@@ -301,8 +301,8 @@ where you can specify which query params will be forwarded to IDP
 This example will allow passing `myparam` and `yourparam` with any value to IDP:
 
 ```bash
-  --allowed-query-params="" \
-  --allowed-query-params=""
+  --allowed-query-params="myparam" \
+  --allowed-query-params="yourparam"
 ```
 
 yaml example:
@@ -322,7 +322,7 @@ yaml example:
 ```yaml
   allowed-query-params:
     myparam: "myvalue"
-    yourparam: "yourvalueF"
+    yourparam: "yourvalue"
 ```
 
 ## TCP proxy with HTTP CONNECT
