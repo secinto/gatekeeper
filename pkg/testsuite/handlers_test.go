@@ -1019,6 +1019,58 @@ func TestAuthorizationURL(t *testing.T) {
 				},
 			},
 		},
+		{
+			Name: "TestQueryParamsWithDefaultValueAllowedAny",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = false
+				conf.AllowedQueryParams = map[string]string{
+					"test":  "",
+					"test1": "test",
+				}
+				conf.DefaultAllowedQueryParams = map[string]string{
+					"test": "yes",
+				}
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:       "/admin?test1=test",
+					Redirects: true,
+					ExpectedHeadersValidator: map[string]func(*testing.T, *config.Config, string){
+						"Location": func(t *testing.T, c *config.Config, value string) {
+							assert.Contains(t, value, "test1=test")
+							assert.Contains(t, value, "test=yes")
+						},
+					},
+					ExpectedCode: http.StatusSeeOther,
+				},
+			},
+		},
+		{
+			Name: "TestQueryParamsWithDefaultValueAllowedSpecific",
+			ProxySettings: func(conf *config.Config) {
+				conf.NoRedirects = false
+				conf.AllowedQueryParams = map[string]string{
+					"test":  "yes",
+					"test1": "test",
+				}
+				conf.DefaultAllowedQueryParams = map[string]string{
+					"test": "yes",
+				}
+			},
+			ExecutionSettings: []fakeRequest{
+				{
+					URI:       "/admin?test1=test",
+					Redirects: true,
+					ExpectedHeadersValidator: map[string]func(*testing.T, *config.Config, string){
+						"Location": func(t *testing.T, c *config.Config, value string) {
+							assert.Contains(t, value, "test1=test")
+							assert.Contains(t, value, "test=yes")
+						},
+					},
+					ExpectedCode: http.StatusSeeOther,
+				},
+			},
+		},
 	}
 
 	for _, testCase := range testCases {

@@ -119,6 +119,7 @@ func oauthAuthorizationHandler(
 	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
 	customSignInPage func(wrt http.ResponseWriter, authURL string),
 	allowedQueryParams map[string]string,
+	defaultAllowedQueryParams map[string]string,
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(wrt http.ResponseWriter, req *http.Request) {
 		if skipTokenVerification {
@@ -180,6 +181,13 @@ func oauthAuthorizationHandler(
 						authCodeOptions,
 						oauth2.SetAuthURLParam(key, param),
 					)
+				} else {
+					if val, ok := defaultAllowedQueryParams[key]; ok {
+						authCodeOptions = append(
+							authCodeOptions,
+							oauth2.SetAuthURLParam(key, val),
+						)
+					}
 				}
 			}
 		}

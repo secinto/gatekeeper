@@ -182,6 +182,7 @@ func redirectToAuthorization(
 	baseURI string,
 	oAuthURI string,
 	allowedQueryParams map[string]string,
+	defaultAllowedQueryParams map[string]string,
 ) func(wrt http.ResponseWriter, req *http.Request) context.Context {
 	return func(wrt http.ResponseWriter, req *http.Request) context.Context {
 		if noRedirects {
@@ -204,6 +205,10 @@ func redirectToAuthorization(
 						}
 					}
 					query += fmt.Sprintf("&%s=%s", key, param)
+				} else {
+					if val, ok := defaultAllowedQueryParams[key]; ok {
+						query += fmt.Sprintf("&%s=%s", key, val)
+					}
 				}
 			}
 			authQuery += query

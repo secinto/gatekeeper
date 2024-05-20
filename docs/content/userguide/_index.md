@@ -306,6 +306,7 @@ This example will allow passing `myparam` and `yourparam` with any value to IDP:
 ```
 
 yaml example:
+
 ```yaml
   allowed-query-params:
     myparam: ""
@@ -319,8 +320,29 @@ This example will allow passing `myparam` and `yourparam` only with specified va
 ```
 
 yaml example:
+
 ```yaml
   allowed-query-params:
+    myparam: "myvalue"
+    yourparam: "yourvalue"
+```
+
+If you would like to have defaults for your parameters, there is `default-allowed-query-params` option available, these values
+will be used only when there are no params specified in url:
+
+**NOTE**: Params present in default query params must be allowed by allowed-query-params option
+
+cli example:
+
+```bash
+  --default-allowed-query-params="myparam=myvalue" \
+  --default-allowed-query-params="yourparam=yourvalue"
+```
+
+yaml example:
+
+```yaml
+  default-allowed-query-params:
     myparam: "myvalue"
     yourparam: "yourvalue"
 ```

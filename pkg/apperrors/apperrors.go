@@ -148,4 +148,8 @@ var (
 	ErrHmacRequiresEncKey                   = errors.New("enable-hmac requires encryption key")
 	ErrPostLogoutRedirectURIRequiresIDToken = errors.New("post logout redirect uri requires id token, enable id token cookie")
 	ErrAllowedQueryParamsWithNoRedirects    = errors.New("allowed-query-params are not valid with noredirects=true")
+	ErrDefaultAllowedQueryParamEmpty        = errors.New("default-allowed-query-params value cannot be empty")
+	ErrTooManyDefaultAllowedQueryParams     = errors.New("you have more default query params than allowed query params")
+	ErrMissingDefaultQueryParamInAllowed    = errors.New("param is present in default query params but missing in allowed")
+	ErrDefaultQueryParamNotAllowed          = errors.New("default query param is not in allowed query params")
 )

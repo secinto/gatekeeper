@@ -103,6 +103,8 @@ type Config struct {
 	CustomHTTPMethods []string `json:"custom-http-methods" usage:"list of additional non-standard http methods" yaml:"custom-http-methods"`
 	// Allowed Query Params sent to IDP
 	AllowedQueryParams map[string]string `json:"allowed-query-params" usage:"allowed query params, sent to IDP key=optional value" yaml:"allowed-query-params"`
+	// Default Allowed Query Params
+	DefaultAllowedQueryParams map[string]string `json:"default-allowed-query-params" usage:"default allowed query params, sent to IDP key=value" yaml:"default-allowed-query-params"`
 
 	// EnableSelfSignedTLS indicates we should create a self-signed ceritificate for the service
 	EnabledSelfSignedTLS bool `env:"ENABLE_SELF_SIGNED_TLS" json:"enable-self-signed-tls" usage:"create self signed certificates for the proxy" yaml:"enable-self-signed-tls"`
@@ -351,6 +353,7 @@ func NewDefaultConfig() *Config {
 		HTTPOnlyCookie:                true,
 		Headers:                       make(map[string]string),
 		AllowedQueryParams:            make(map[string]string),
+		DefaultAllowedQueryParams:     make(map[string]string),
 		LetsEncryptCacheDir:           "./cache/",
 		MatchClaims:                   make(map[string]string),
 		MaxIdleConns:                  100,
@@ -411,6 +414,10 @@ func (r *Config) GetTags() map[string]string {
 
 func (r *Config) GetAllowedQueryParams() map[string]string {
 	return r.AllowedQueryParams
+}
+
+func (r *Config) GetDefaultAllowedQueryParams() map[string]string {
+	return r.DefaultAllowedQueryParams
 }
 
 // readConfigFile reads and parses the configuration file
@@ -1015,8 +1022,23 @@ func (r *Config) isPostLogoutRedirectURIValid() error {
 }
 
 func (r *Config) isAllowedQueryParamsValid() error {
-	if len(r.AllowedQueryParams) > 0 && r.NoRedirects {
+	if (len(r.AllowedQueryParams) > 0 || len(r.DefaultAllowedQueryParams) > 0) && r.NoRedirects {
 		return apperrors.ErrAllowedQueryParamsWithNoRedirects
+	}
+	if len(r.DefaultAllowedQueryParams) > len(r.AllowedQueryParams) {
+		return apperrors.ErrTooManyDefaultAllowedQueryParams
+	}
+	for k, val := range r.DefaultAllowedQueryParams {
+		if val == "" {
+			return apperrors.ErrDefaultAllowedQueryParamEmpty
+		}
+		allowedVal, ok := r.AllowedQueryParams[k]
+		if !ok {
+			return apperrors.ErrMissingDefaultQueryParamInAllowed
+		}
+		if allowedVal != "" && val != allowedVal {
+			return apperrors.ErrDefaultQueryParamNotAllowed
+		}
 	}
 	return nil
 }
