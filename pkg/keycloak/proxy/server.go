@@ -347,7 +347,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.EncryptionKey,
 	)
 
-	r.getRedirectionURL = getRedirectionURL(
+	r.getRedirectionURL = handlers.GetRedirectionURL(
 		r.Log,
 		r.Config.RedirectionURL,
 		r.Config.NoProxy,
@@ -423,7 +423,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		)
 		adminEngine.Get(
 			constant.MetricsURL,
-			proxyMetricsHandler(
+			handlers.ProxyMetricsHandler(
 				r.Config.LocalhostMetrics,
 				r.accessForbidden,
 				r.metricsHandler,
@@ -550,7 +550,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			tokenHandler(r.GetIdentity, r.Config.CookieAccessName, r.accessError),
 		)
 		eng.Post(constant.LoginURL, loginHand)
-		eng.Get(constant.DiscoveryURL, discoveryHandler(r.Log, r.WithOAuthURI))
+		eng.Get(constant.DiscoveryURL, handlers.DiscoveryHandler(r.Log, r.WithOAuthURI))
 
 		if r.Config.ListenAdmin == "" {
 			eng.Mount("/", adminEngine)

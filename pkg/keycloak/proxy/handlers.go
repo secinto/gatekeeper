@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 
 	"net/http"
 	"net/url"
@@ -36,6 +35,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/handlers"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
@@ -43,67 +43,6 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 )
-
-type DiscoveryResponse struct {
-	ExpiredURL string `json:"expired_endpoint"`
-	LogoutURL  string `json:"logout_endpoint"`
-	TokenURL   string `json:"token_endpoint"`
-	LoginURL   string `json:"login_endpoint"`
-}
-
-// getRedirectionURL returns the redirectionURL for the oauth flow
-func getRedirectionURL(
-	logger *zap.Logger,
-	redirectionURL string,
-	noProxy bool,
-	noRedirects bool,
-	secureCookie bool,
-	cookieOAuthStateName string,
-	withOAuthURI func(string) string,
-) func(wrt http.ResponseWriter, req *http.Request) string {
-	return func(wrt http.ResponseWriter, req *http.Request) string {
-		var redirect string
-
-		switch redirectionURL {
-		case "":
-			var scheme string
-			var host string
-
-			if noProxy && !noRedirects {
-				scheme = req.Header.Get("X-Forwarded-Proto")
-				host = req.Header.Get("X-Forwarded-Host")
-			} else {
-				// need to determine the scheme, cx.Request.URL.Scheme doesn't have it, best way is to default
-				// and then check for TLS
-				scheme = constant.UnsecureScheme
-				host = req.Host
-				if req.TLS != nil {
-					scheme = constant.SecureScheme
-				}
-			}
-
-			if scheme == constant.UnsecureScheme && secureCookie {
-				hint := "you have secure cookie set to true but using http "
-				hint += "use https or secure cookie false"
-				logger.Warn(hint)
-			}
-
-			redirect = fmt.Sprintf("%s://%s", scheme, host)
-		default:
-			redirect = redirectionURL
-		}
-
-		state, _ := req.Cookie(cookieOAuthStateName)
-
-		if state != nil && req.URL.Query().Get("state") != state.Value {
-			logger.Error("state parameter mismatch")
-			wrt.WriteHeader(http.StatusForbidden)
-			return ""
-		}
-
-		return fmt.Sprintf("%s%s", redirect, withOAuthURI(constant.CallbackURL))
-	}
-}
 
 // oauthAuthorizationHandler is responsible for performing the redirection to oauth provider
 //
@@ -756,7 +695,7 @@ func logoutHandler(
 			identityToken = refresh
 		}
 
-		idToken, _, err := retrieveIDToken(
+		idToken, _, err := handlers.RetrieveIDToken(
 			cookieIDTokenName,
 			enableEncryptedToken,
 			forceEncryptedCookie,
@@ -952,23 +891,6 @@ func tokenHandler(
 	}
 }
 
-// proxyMetricsHandler forwards the request into the prometheus handler
-func proxyMetricsHandler(
-	localhostMetrics bool,
-	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
-	metricsHandler http.Handler,
-) func(wrt http.ResponseWriter, req *http.Request) {
-	return func(wrt http.ResponseWriter, req *http.Request) {
-		if localhostMetrics {
-			if !net.ParseIP(utils.RealIP(req)).IsLoopback() {
-				accessForbidden(wrt, req)
-				return
-			}
-		}
-		metricsHandler.ServeHTTP(wrt, req)
-	}
-}
-
 // retrieveRefreshToken retrieves the refresh token from store or cookie
 func retrieveRefreshToken(
 	store storage.Storage,
@@ -994,68 +916,4 @@ func retrieveRefreshToken(
 	encrypted := token // returns encrypted, avoids encoding twice
 	token, err = encryption.DecodeText(token, encryptionKey)
 	return token, encrypted, err
-}
-
-// retrieveIDToken retrieves the id token from cookie
-func retrieveIDToken(
-	cookieIDTokenName string,
-	enableEncryptedToken bool,
-	forceEncryptedCookie bool,
-	encryptionKey string,
-	req *http.Request,
-) (string, string, error) {
-	var token string
-	var err error
-	var encrypted string
-
-	token, err = utils.GetTokenInCookie(req, cookieIDTokenName)
-
-	if err != nil {
-		return token, "", err
-	}
-
-	if enableEncryptedToken || forceEncryptedCookie {
-		encrypted = token
-		token, err = encryption.DecodeText(token, encryptionKey)
-	}
-
-	return token, encrypted, err
-}
-
-// discoveryHandler provides endpoint info
-func discoveryHandler(
-	logger *zap.Logger,
-	withOAuthURI func(string) string,
-) func(wrt http.ResponseWriter, _ *http.Request) {
-	return func(wrt http.ResponseWriter, _ *http.Request) {
-		resp := &DiscoveryResponse{
-			ExpiredURL: withOAuthURI(constant.ExpiredURL),
-			LogoutURL:  withOAuthURI(constant.LogoutURL),
-			TokenURL:   withOAuthURI(constant.TokenURL),
-			LoginURL:   withOAuthURI(constant.LoginURL),
-		}
-
-		respBody, err := json.Marshal(resp)
-
-		if err != nil {
-			logger.Error(
-				apperrors.ErrMarshallDiscoveryResp.Error(),
-				zap.String("error", err.Error()),
-			)
-
-			wrt.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		wrt.Header().Set("Content-Type", "application/json")
-		wrt.WriteHeader(http.StatusOK)
-		_, err = wrt.Write(respBody)
-
-		if err != nil {
-			logger.Error(
-				apperrors.ErrDiscoveryResponseWrite.Error(),
-				zap.String("error", err.Error()),
-			)
-		}
-	}
 }
