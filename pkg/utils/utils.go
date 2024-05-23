@@ -252,17 +252,6 @@ func DialAddress(location *url.URL) string {
 	return location.Host
 }
 
-// findCookie looks for a cookie in a list of cookies
-func FindCookie(name string, cookies []*http.Cookie) *http.Cookie {
-	for _, cookie := range cookies {
-		if cookie.Name == name {
-			return cookie
-		}
-	}
-
-	return nil
-}
-
 // toHeader is a helper method to play nice in the headers
 func ToHeader(v string) string {
 	symbols := symbolsFilter.Split(v, -1)

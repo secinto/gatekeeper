@@ -30,8 +30,8 @@ import (
 
 	uuid "github.com/gofrs/uuid"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestDecodeKeyPairs(t *testing.T) {
@@ -196,8 +196,8 @@ func TestFindCookie(t *testing.T) {
 	cookies := []*http.Cookie{
 		{Name: "cookie_there"},
 	}
-	assert.NotNil(t, FindCookie("cookie_there", cookies))
-	assert.Nil(t, FindCookie("not_there", cookies))
+	assert.NotNil(t, cookie.FindCookie("cookie_there", cookies))
+	assert.Nil(t, cookie.FindCookie("not_there", cookies))
 }
 
 func TestHasAccessOK(t *testing.T) {
@@ -506,57 +506,4 @@ func TestMergeMaps(t *testing.T) {
 func getFakeURL(location string) *url.URL {
 	u, _ := url.Parse(location)
 	return u
-}
-
-func TestGetRefreshTokenFromCookie(t *testing.T) {
-	cases := []struct {
-		Cookies  *http.Cookie
-		Expected string
-		Ok       bool
-	}{
-		{
-			Cookies: &http.Cookie{},
-		},
-		{
-			Cookies: &http.Cookie{
-				Name:   "not_a_session_cookie",
-				Path:   "/",
-				Domain: "127.0.0.1",
-			},
-		},
-		{
-			Cookies: &http.Cookie{
-				Name:   "kc-state",
-				Path:   "/",
-				Domain: "127.0.0.1",
-				Value:  "refresh_token",
-			},
-			Expected: "refresh_token",
-			Ok:       true,
-		},
-	}
-
-	for _, testCase := range cases {
-		req := &http.Request{
-			Method: http.MethodGet,
-			Header: make(map[string][]string),
-			Host:   "127.0.0.1",
-			URL: &url.URL{
-				Scheme: "http",
-				Host:   "127.0.0.1",
-				Path:   "/",
-			},
-		}
-		req.AddCookie(testCase.Cookies)
-		token, err := GetRefreshTokenFromCookie(req, constant.RefreshCookie)
-		switch testCase.Ok {
-		case true:
-			require.NoError(t, err)
-			assert.NotEmpty(t, token)
-			assert.Equal(t, testCase.Expected, token)
-		default:
-			require.Error(t, err)
-			assert.Empty(t, token)
-		}
-	}
 }

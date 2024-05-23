@@ -37,6 +37,8 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"golang.org/x/oauth2"
@@ -59,7 +61,7 @@ func entrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			// @step: create a context for the request
-			scope := &RequestScope{}
+			scope := &models.RequestScope{}
 			// Save the exact formatting of the incoming request so we can use it later
 			scope.Path = req.URL.Path
 			scope.RawPath = req.URL.RawPath
@@ -123,7 +125,7 @@ func loggingMiddleware(
 				return
 			}
 
-			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 			if !assertOk {
 				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
@@ -174,7 +176,7 @@ func authenticationMiddleware(
 	logger *zap.Logger,
 	cookieAccessName string,
 	cookieRefreshName string,
-	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
 	idpClient *gocloak.GoCloak,
 	enableIDPSessionCheck bool,
 	provider *oidc3.Provider,
@@ -196,7 +198,7 @@ func authenticationMiddleware(
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
-			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 			if !assertOk {
 				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
@@ -404,7 +406,7 @@ func authenticationMiddleware(
 					cookMgr.DropAccessTokenCookie(req.WithContext(ctx), wrt, accessToken, accessExpiresIn)
 
 					// update the with the new access token and inject into the context
-					newUser, err := ExtractIdentity(&newAccToken)
+					newUser, err := session.ExtractIdentity(&newAccToken)
 					if err != nil {
 						lLog.Error(err.Error())
 						accessForbidden(wrt, req)
@@ -492,12 +494,12 @@ func authorizationMiddleware(
 	clientID string,
 	skipClientIDCheck bool,
 	skipIssuerCheck bool,
-	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
 	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
-			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 			if !assertOk {
 				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
@@ -545,7 +547,7 @@ func authorizationMiddleware(
 
 				authzFunc := func(
 					targetPath string,
-					userPerms authorization.Permissions,
+					userPerms models.Permissions,
 				) (authorization.AuthzDecision, error) {
 					pat.m.RLock()
 					token := pat.Token.AccessToken
@@ -575,7 +577,7 @@ func authorizationMiddleware(
 					authzFunc,
 				)
 				if err != nil {
-					var umaUser *UserContext
+					var umaUser *models.UserContext
 					scope.Logger.Error(err.Error())
 					scope.Logger.Info("trying to get new uma token")
 
@@ -686,7 +688,7 @@ func authorizationMiddleware(
 //nolint:cyclop
 func checkClaim(
 	logger *zap.Logger,
-	user *UserContext,
+	user *models.UserContext,
 	claimName string,
 	match *regexp.Regexp,
 	resourceURL string,
@@ -783,7 +785,7 @@ func admissionMiddleware(
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			// we don't need to continue is a decision has been made
-			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 			if !assertOk {
 				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
@@ -912,7 +914,7 @@ func identityHeadersMiddleware(
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
-			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 			if !assertOk {
 				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
@@ -946,7 +948,7 @@ func identityHeadersMiddleware(
 				}
 				// are we filtering out the cookies
 				if !enableAuthzCookies {
-					_ = filterCookies(req, cookieFilter)
+					_ = cookie.FilterCookies(req, cookieFilter)
 				}
 				// inject any custom claims
 				for claim, header := range customClaims {
@@ -986,7 +988,7 @@ func securityMiddleware(
 		})
 
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
-			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 			if !assertOk {
 				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
@@ -1026,12 +1028,12 @@ func proxyDenyMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			ctxVal := req.Context().Value(constant.ContextScopeName)
 
-			var scope *RequestScope
+			var scope *models.RequestScope
 			if ctxVal == nil {
-				scope = &RequestScope{}
+				scope = &models.RequestScope{}
 			} else {
 				var assertOk bool
-				scope, assertOk = ctxVal.(*RequestScope)
+				scope, assertOk = ctxVal.(*models.RequestScope)
 				if !assertOk {
 					logger.Error(apperrors.ErrAssertionFailed.Error())
 					return
@@ -1064,7 +1066,7 @@ func denyMiddleware(
 func hmacMiddleware(logger *zap.Logger, encKey string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
-			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 			if !assertOk {
 				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return

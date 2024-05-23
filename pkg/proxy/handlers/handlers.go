@@ -28,16 +28,11 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
 )
-
-type DiscoveryResponse struct {
-	ExpiredURL string `json:"expired_endpoint"`
-	LogoutURL  string `json:"logout_endpoint"`
-	TokenURL   string `json:"token_endpoint"`
-	LoginURL   string `json:"login_endpoint"`
-}
 
 // EmptyHandler is responsible for doing nothing
 func EmptyHandler(_ http.ResponseWriter, _ *http.Request) {}
@@ -123,7 +118,7 @@ func RetrieveIDToken(
 	var err error
 	var encrypted string
 
-	token, err = utils.GetTokenInCookie(req, cookieIDTokenName)
+	token, err = session.GetTokenInCookie(req, cookieIDTokenName)
 
 	if err != nil {
 		return token, "", err
@@ -143,7 +138,7 @@ func DiscoveryHandler(
 	withOAuthURI func(string) string,
 ) func(wrt http.ResponseWriter, _ *http.Request) {
 	return func(wrt http.ResponseWriter, _ *http.Request) {
-		resp := &DiscoveryResponse{
+		resp := &models.DiscoveryResponse{
 			ExpiredURL: withOAuthURI(constant.ExpiredURL),
 			LogoutURL:  withOAuthURI(constant.LogoutURL),
 			TokenURL:   withOAuthURI(constant.TokenURL),

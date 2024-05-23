@@ -43,6 +43,8 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 
 	"github.com/go-jose/go-jose/v3/jwt"
@@ -1624,7 +1626,7 @@ func checkAccessTokenEncryption(t *testing.T, cfg *config.Config, value string) 
 		return false
 	}
 
-	user, err := proxy.ExtractIdentity(token)
+	user, err := session.ExtractIdentity(token)
 
 	if err != nil {
 		return false
@@ -2330,7 +2332,7 @@ func TestEnableUma(t *testing.T) {
 					ExpectedProxy:      false,
 					HasToken:           true,
 					ExpectedCode:       http.StatusForbidden,
-					TokenAuthorization: &authorization.Permissions{},
+					TokenAuthorization: &models.Permissions{},
 					ExpectedContent: func(body string, testNum int) {
 						assert.Contains(t, body, "")
 					},
@@ -2356,8 +2358,8 @@ func TestEnableUma(t *testing.T) {
 					ExpectedProxy: true,
 					HasToken:      true,
 					ExpectedCode:  http.StatusOK,
-					TokenAuthorization: &authorization.Permissions{
-						Permissions: []authorization.Permission{
+					TokenAuthorization: &models.Permissions{
+						Permissions: []models.Permission{
 							{
 								Scopes:       []string{"test"},
 								ResourceID:   "",
@@ -2389,8 +2391,8 @@ func TestEnableUma(t *testing.T) {
 					ExpectedProxy: true,
 					HasToken:      true,
 					ExpectedCode:  http.StatusOK,
-					TokenAuthorization: &authorization.Permissions{
-						Permissions: []authorization.Permission{
+					TokenAuthorization: &models.Permissions{
+						Permissions: []models.Permission{
 							{
 								Scopes:       []string{},
 								ResourceID:   "6ef1b62e-0fd4-47f2-81fc-eead97a01c22",
@@ -2422,8 +2424,8 @@ func TestEnableUma(t *testing.T) {
 					ExpectedProxy: true,
 					HasToken:      true,
 					ExpectedCode:  http.StatusOK,
-					TokenAuthorization: &authorization.Permissions{
-						Permissions: []authorization.Permission{
+					TokenAuthorization: &models.Permissions{
+						Permissions: []models.Permission{
 							{
 								Scopes:       []string{"test"},
 								ResourceID:   "6ef1b62e-0fd4-47f2-81fc-eead97a01c22",

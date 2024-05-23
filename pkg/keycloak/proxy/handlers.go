@@ -37,6 +37,8 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/handlers"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/grokify/go-pkce"
@@ -66,7 +68,7 @@ func oauthAuthorizationHandler(
 			return
 		}
 
-		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 		if !assertOk {
 			logger.Error(apperrors.ErrAssertionFailed.Error())
 			return
@@ -194,7 +196,7 @@ func oauthCallbackHandler(
 			return
 		}
 
-		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 		if !assertOk {
 			logger.Error(apperrors.ErrAssertionFailed.Error())
 			return
@@ -396,7 +398,7 @@ func loginHandler(
 	store storage.Storage,
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(writer http.ResponseWriter, req *http.Request) {
-		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 
 		if !assertOk {
 			logger.Error(apperrors.ErrAssertionFailed.Error())
@@ -455,7 +457,7 @@ func loginHandler(
 					errors.Join(apperrors.ErrParseAccessToken, err)
 			}
 
-			identity, err := ExtractIdentity(accessTokenObj)
+			identity, err := session.ExtractIdentity(accessTokenObj)
 			if err != nil {
 				return http.StatusNotImplemented,
 					errors.Join(apperrors.ErrExtractIdentityFromAccessToken, err)
@@ -576,10 +578,10 @@ func loginHandler(
 				}
 			}
 
-			var resp TokenResponse
+			var resp models.TokenResponse
 
 			if enableEncryptedToken {
-				resp = TokenResponse{
+				resp = models.TokenResponse{
 					IDToken:      idToken,
 					AccessToken:  accessToken,
 					RefreshToken: refreshToken,
@@ -588,7 +590,7 @@ func loginHandler(
 					TokenType:    token.TokenType,
 				}
 			} else {
-				resp = TokenResponse{
+				resp = models.TokenResponse{
 					IDToken:      plainIDToken,
 					AccessToken:  token.AccessToken,
 					RefreshToken: refreshToken,
@@ -643,7 +645,7 @@ func logoutHandler(
 	cookManager *cookie.Manager,
 	idpClient *gocloak.GoCloak,
 	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
-	GetIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
+	GetIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(writer http.ResponseWriter, req *http.Request) {
 		// @check if the redirection is there
@@ -667,7 +669,7 @@ func logoutHandler(
 			}
 		}
 
-		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*RequestScope)
+		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 		if !assertOk {
 			logger.Error(apperrors.ErrAssertionFailed.Error())
 			writer.WriteHeader(http.StatusInternalServerError)
@@ -835,7 +837,7 @@ func logoutHandler(
 
 // expirationHandler checks if the token has expired
 func expirationHandler(
-	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
 	cookieAccessName string,
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(wrt http.ResponseWriter, req *http.Request) {
@@ -856,7 +858,7 @@ func expirationHandler(
 
 // tokenHandler display access token to screen
 func tokenHandler(
-	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*UserContext, error),
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
 	cookieAccessName string,
 	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
 ) func(wrt http.ResponseWriter, req *http.Request) {
@@ -897,7 +899,7 @@ func retrieveRefreshToken(
 	cookieRefreshName string,
 	encryptionKey string,
 	req *http.Request,
-	user *UserContext,
+	user *models.UserContext,
 ) (string, string, error) {
 	var token string
 	var err error
@@ -906,7 +908,7 @@ func retrieveRefreshToken(
 	case true:
 		token, err = GetRefreshTokenFromStore(req.Context(), store, user.RawToken)
 	default:
-		token, err = utils.GetRefreshTokenFromCookie(req, cookieRefreshName)
+		token, err = session.GetRefreshTokenFromCookie(req, cookieRefreshName)
 	}
 
 	if err != nil {

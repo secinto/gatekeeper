@@ -56,6 +56,7 @@ import (
 	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/handlers"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/prometheus/client_golang/prometheus"
@@ -339,7 +340,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.Scopes,
 	)
 
-	r.GetIdentity = GetIdentity(
+	r.GetIdentity = session.GetIdentity(
 		r.Log,
 		r.Config.SkipAuthorizationHeaderIdentity,
 		r.Config.EnableEncryptedToken,

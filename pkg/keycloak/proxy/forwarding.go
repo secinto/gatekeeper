@@ -22,6 +22,7 @@ import (
 
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"go.uber.org/zap"
 )
@@ -45,10 +46,10 @@ func proxyMiddleware(
 
 			// @step: retrieve the request scope
 			ctxVal := req.Context().Value(constant.ContextScopeName)
-			var scope *RequestScope
+			var scope *models.RequestScope
 			if ctxVal != nil {
 				var assertOk bool
-				scope, assertOk = ctxVal.(*RequestScope)
+				scope, assertOk = ctxVal.(*models.RequestScope)
 				if !assertOk {
 					logger.Error(apperrors.ErrAssertionFailed.Error())
 					return

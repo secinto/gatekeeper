@@ -20,6 +20,8 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 	"github.com/oleiade/reflections"
 	"github.com/stoewer/go-strcase"
@@ -51,7 +53,7 @@ type fakeRequest struct {
 	SkipIssuerCheck               bool
 	RequestCA                     string
 	TokenClaims                   map[string]interface{}
-	TokenAuthorization            *authorization.Permissions
+	TokenAuthorization            *models.Permissions
 	URI                           string
 	URL                           string
 	Username                      string
@@ -473,7 +475,7 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 
 		if len(reqCfg.ExpectedCookies) > 0 {
 			for cookName, expVal := range reqCfg.ExpectedCookies {
-				cookie := utils.FindCookie(cookName, resp.Cookies())
+				cookie := cookie.FindCookie(cookName, resp.Cookies())
 
 				if !assert.NotNil(
 					t,
@@ -501,7 +503,7 @@ func (f *fakeProxy) RunTests(t *testing.T, requests []fakeRequest) {
 
 		if len(reqCfg.ExpectedCookiesValidator) > 0 {
 			for cookName, cookValidator := range reqCfg.ExpectedCookiesValidator {
-				cookie := utils.FindCookie(cookName, resp.Cookies())
+				cookie := cookie.FindCookie(cookName, resp.Cookies())
 
 				if !assert.NotNil(
 					t,
