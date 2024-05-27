@@ -17,7 +17,6 @@ package proxy
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
@@ -25,8 +24,6 @@ import (
 	"github.com/grokify/go-pkce"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
-
-	"github.com/go-jose/go-jose/v3/jwt"
 )
 
 // newOAuth2Config returns a oauth2 config
@@ -53,95 +50,6 @@ func newOAuth2Config(
 
 		return conf
 	}
-}
-
-// getRefreshedToken attempts to refresh the access token, returning the parsed token, optionally with a renewed
-// refresh token and the time the access and refresh tokens expire
-//
-// NOTE: we may be able to extract the specific (non-standard) claim refresh_expires_in and refresh_expires
-// from response.RawBody.
-// When not available, keycloak provides us with the same (for now) expiry value for ID token.
-func getRefreshedToken(
-	ctx context.Context,
-	conf *oauth2.Config,
-	httpClient *http.Client,
-	oldRefreshToken string,
-) (jwt.JSONWebToken, string, string, time.Time, time.Duration, error) {
-	ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
-	start := time.Now()
-
-	tkn, err := conf.TokenSource(ctx, &oauth2.Token{RefreshToken: oldRefreshToken}).Token()
-	if err != nil {
-		if strings.Contains(err.Error(), "invalid_grant") {
-			return jwt.JSONWebToken{},
-				"",
-				"",
-				time.Time{},
-				time.Duration(0),
-				apperrors.ErrRefreshTokenExpired
-		}
-		return jwt.JSONWebToken{},
-			"",
-			"",
-			time.Time{},
-			time.Duration(0),
-			err
-	}
-
-	taken := time.Since(start).Seconds()
-	metrics.OauthTokensMetric.WithLabelValues("renew").Inc()
-	metrics.OauthLatencyMetric.WithLabelValues("renew").Observe(taken)
-
-	token, err := jwt.ParseSigned(tkn.AccessToken)
-	if err != nil {
-		return jwt.JSONWebToken{},
-			"",
-			"",
-			time.Time{},
-			time.Duration(0),
-			err
-	}
-
-	refreshToken, err := jwt.ParseSigned(tkn.RefreshToken)
-	if err != nil {
-		return jwt.JSONWebToken{},
-			"",
-			"",
-			time.Time{},
-			time.Duration(0),
-			err
-	}
-
-	stdClaims := &jwt.Claims{}
-	err = token.UnsafeClaimsWithoutVerification(stdClaims)
-	if err != nil {
-		return jwt.JSONWebToken{},
-			"",
-			"",
-			time.Time{},
-			time.Duration(0),
-			err
-	}
-
-	refreshStdClaims := &jwt.Claims{}
-	err = refreshToken.UnsafeClaimsWithoutVerification(refreshStdClaims)
-	if err != nil {
-		return jwt.JSONWebToken{},
-			"",
-			"",
-			time.Time{},
-			time.Duration(0),
-			err
-	}
-
-	refreshExpiresIn := time.Until(refreshStdClaims.Expiry.Time())
-
-	return *token,
-		tkn.AccessToken,
-		tkn.RefreshToken,
-		stdClaims.Expiry.Time(),
-		refreshExpiresIn,
-		nil
 }
 
 // exchangeAuthenticationCode exchanges the authentication code with the oauth server for a access token

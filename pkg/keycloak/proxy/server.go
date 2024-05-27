@@ -56,6 +56,7 @@ import (
 	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/handlers"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
+	gmiddleware "github.com/gogatekeeper/gatekeeper/pkg/proxy/middleware"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
@@ -224,7 +225,7 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 	engine.NotFound(handlers.EmptyHandler)
 
 	if r.Config.EnableDefaultDeny || r.Config.EnableDefaultDenyStrict {
-		engine.Use(methodCheckMiddleware(r.Log))
+		engine.Use(gmiddleware.MethodCheckMiddleware(r.Log))
 	} else {
 		engine.MethodNotAllowed(handlers.EmptyHandler)
 	}
@@ -234,7 +235,7 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 	// @check if the request tracking id middleware is enabled
 	if r.Config.EnableRequestID {
 		r.Log.Info("enabled the correlation request id middleware")
-		engine.Use(requestIDMiddleware(r.Config.RequestIDHeader))
+		engine.Use(gmiddleware.RequestIDMiddleware(r.Config.RequestIDHeader))
 	}
 
 	if r.Config.EnableCompression {
@@ -242,10 +243,10 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 	}
 
 	// @step: enable the entrypoint middleware
-	engine.Use(entrypointMiddleware(r.Log))
+	engine.Use(gmiddleware.EntrypointMiddleware(r.Log))
 
 	if r.Config.EnableLogging {
-		engine.Use(loggingMiddleware(r.Log, r.Config.Verbose))
+		engine.Use(gmiddleware.LoggingMiddleware(r.Log, r.Config.Verbose))
 	}
 
 	// step: load the templates if any
@@ -281,7 +282,7 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 
 	if r.Config.EnableSecurityFilter {
 		engine.Use(
-			securityMiddleware(
+			gmiddleware.SecurityMiddleware(
 				r.Log,
 				r.Config.Hostnames,
 				r.Config.EnableBrowserXSSFilter,
@@ -371,7 +372,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 	)
 
 	if r.Config.EnableHmac {
-		engine.Use(hmacMiddleware(r.Log, r.Config.EncryptionKey))
+		engine.Use(gmiddleware.HmacMiddleware(r.Log, r.Config.EncryptionKey))
 	}
 
 	// @step: configure CORS middleware
@@ -404,7 +405,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 	r.Router = engine
 
 	if len(r.Config.ResponseHeaders) > 0 {
-		engine.Use(responseHeaderMiddleware(r.Config.ResponseHeaders))
+		engine.Use(gmiddleware.ResponseHeaderMiddleware(r.Config.ResponseHeaders))
 	}
 
 	// step: define admin subrouter: health and metrics
@@ -432,12 +433,12 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		)
 	}
 
-	authMid := authenticationMiddleware(
+	authMid := gmiddleware.AuthenticationMiddleware(
 		r.Log,
 		r.Config.CookieAccessName,
 		r.Config.CookieRefreshName,
 		r.GetIdentity,
-		r.IdpClient,
+		r.IdpClient.RestyClient().GetClient(),
 		r.Config.EnableIDPSessionCheck,
 		r.Provider,
 		r.Config.SkipTokenVerification,
@@ -460,7 +461,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 	loginHand := loginHandler(
 		r.Log,
 		r.Config.OpenIDProviderTimeout,
-		r.IdpClient,
+		r.IdpClient.RestyClient().GetClient(),
 		r.Config.EnableLoginHandler,
 		r.newOAuth2Config,
 		r.getRedirectionURL,
@@ -491,7 +492,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.EnableLogoutRedirect,
 		r.Store,
 		r.Cm,
-		r.IdpClient,
+		r.IdpClient.RestyClient().GetClient(),
 		r.accessError,
 		r.GetIdentity,
 	)
@@ -540,15 +541,15 @@ func (r *OauthProxy) CreateReverseProxy() error {
 	)
 
 	// step: add the routing for oauth
-	engine.With(proxyDenyMiddleware(r.Log)).Route(r.Config.BaseURI+r.Config.OAuthURI, func(eng chi.Router) {
+	engine.With(gmiddleware.ProxyDenyMiddleware(r.Log)).Route(r.Config.BaseURI+r.Config.OAuthURI, func(eng chi.Router) {
 		eng.MethodNotAllowed(handlers.MethodNotAllowHandlder)
 		eng.HandleFunc(constant.AuthorizationURL, oauthAuthorizationHand)
 		eng.Get(constant.CallbackURL, oauthCallbackHand)
-		eng.Get(constant.ExpiredURL, expirationHandler(r.GetIdentity, r.Config.CookieAccessName))
+		eng.Get(constant.ExpiredURL, handlers.ExpirationHandler(r.GetIdentity, r.Config.CookieAccessName))
 		eng.With(authMid).Get(constant.LogoutURL, logoutHand)
 		eng.With(authMid).Get(
 			constant.TokenURL,
-			tokenHandler(r.GetIdentity, r.Config.CookieAccessName, r.accessError),
+			handlers.TokenHandler(r.GetIdentity, r.Config.CookieAccessName, r.accessError),
 		)
 		eng.Post(constant.LoginURL, loginHand)
 		eng.Get(constant.DiscoveryURL, handlers.DiscoveryHandler(r.Log, r.WithOAuthURI))
@@ -579,7 +580,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		}
 
 		if r.Config.ListenAdmin == "" {
-			engine.With(proxyDenyMiddleware(r.Log)).Mount(constant.DebugURL, debugEngine)
+			engine.With(gmiddleware.ProxyDenyMiddleware(r.Log)).Mount(constant.DebugURL, debugEngine)
 		}
 	}
 
@@ -591,7 +592,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		admin.MethodNotAllowed(handlers.EmptyHandler)
 		admin.NotFound(handlers.EmptyHandler)
 		admin.Use(middleware.Recoverer)
-		admin.Use(proxyDenyMiddleware(r.Log))
+		admin.Use(gmiddleware.ProxyDenyMiddleware(r.Log))
 		admin.Route("/", func(e chi.Router) {
 			e.Mount(r.Config.OAuthURI, adminEngine)
 			if debugEngine != nil {
@@ -655,13 +656,13 @@ func (r *OauthProxy) CreateReverseProxy() error {
 
 		middlewares := []func(http.Handler) http.Handler{
 			authMid,
-			admissionMiddleware(
+			gmiddleware.AdmissionMiddleware(
 				r.Log,
 				res,
 				r.Config.MatchClaims,
 				r.accessForbidden,
 			),
-			identityHeadersMiddleware(
+			gmiddleware.IdentityHeadersMiddleware(
 				r.Log,
 				r.Config.AddClaims,
 				r.Config.CookieAccessName,
@@ -675,8 +676,8 @@ func (r *OauthProxy) CreateReverseProxy() error {
 
 		if res.URL == constant.AllPath && !res.WhiteListed && enableDefaultDenyStrict {
 			middlewares = []func(http.Handler) http.Handler{
-				denyMiddleware(r.Log, r.accessForbidden),
-				proxyDenyMiddleware(r.Log),
+				gmiddleware.DenyMiddleware(r.Log, r.accessForbidden),
+				gmiddleware.ProxyDenyMiddleware(r.Log),
 			}
 		}
 
@@ -708,13 +709,13 @@ func (r *OauthProxy) CreateReverseProxy() error {
 					r.GetIdentity,
 					r.accessForbidden,
 				),
-				admissionMiddleware(
+				gmiddleware.AdmissionMiddleware(
 					r.Log,
 					res,
 					r.Config.MatchClaims,
 					r.accessForbidden,
 				),
-				identityHeadersMiddleware(
+				gmiddleware.IdentityHeadersMiddleware(
 					r.Log,
 					r.Config.AddClaims,
 					r.Config.CookieAccessName,

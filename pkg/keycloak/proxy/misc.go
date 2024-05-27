@@ -235,40 +235,6 @@ func redirectToAuthorization(
 	}
 }
 
-// GetAccessCookieExpiration calculates the expiration of the access token cookie
-func GetAccessCookieExpiration(
-	logger *zap.Logger,
-	accessTokenDuration time.Duration,
-	refresh string,
-) time.Duration {
-	// notes: by default the duration of the access token will be the configuration option, if
-	// however we can decode the refresh token, we will set the duration to the duration of the
-	// refresh token
-	duration := accessTokenDuration
-
-	webToken, err := jwt.ParseSigned(refresh)
-	if err != nil {
-		logger.Error("unable to parse token")
-	}
-
-	if ident, err := session.ExtractIdentity(webToken); err == nil {
-		delta := time.Until(ident.ExpiresAt)
-
-		if delta > 0 {
-			duration = delta
-		}
-
-		logger.Debug(
-			"parsed refresh token with new duration",
-			zap.Duration("new duration", delta),
-		)
-	} else {
-		logger.Debug("refresh token is opaque and cannot be used to extend calculated duration")
-	}
-
-	return duration
-}
-
 //nolint:cyclop
 func getPAT(
 	logger *zap.Logger,
@@ -411,7 +377,7 @@ func WithUMAIdentity(
 		return authorization.DeniedAuthz, apperrors.ErrAccessMismatchUmaToken
 	}
 
-	_, err = verifyToken(
+	_, err = utils.VerifyToken(
 		req.Context(),
 		provider,
 		umaUser.RawToken,
@@ -606,7 +572,7 @@ func verifyOIDCTokens(
 	var oAccToken *oidc3.IDToken
 	var err error
 
-	oIDToken, err = verifyToken(ctx, provider, rawIDToken, clientID, false, false)
+	oIDToken, err = utils.VerifyToken(ctx, provider, rawIDToken, clientID, false, false)
 	if err != nil {
 		return nil, nil, errors.Join(apperrors.ErrVerifyIDToken, err)
 	}
@@ -621,7 +587,7 @@ func verifyOIDCTokens(
 		}
 	}
 
-	oAccToken, err = verifyToken(
+	oAccToken, err = utils.VerifyToken(
 		ctx,
 		provider,
 		rawAccessToken,
@@ -634,49 +600,6 @@ func verifyOIDCTokens(
 	}
 
 	return oAccToken, oIDToken, nil
-}
-
-func verifyToken(
-	ctx context.Context,
-	provider *oidc3.Provider,
-	rawToken string,
-	clientID string,
-	skipClientIDCheck bool,
-	skipIssuerCheck bool,
-) (*oidc3.IDToken, error) {
-	// This verifier with this configuration checks only signatures
-	// we want to know if we are using valid token
-	// bad is that Verify method doesn't check first signatures, so
-	// we have to do it like this
-	verifier := provider.Verifier(
-		&oidc3.Config{
-			ClientID:          clientID,
-			SkipClientIDCheck: true,
-			SkipIssuerCheck:   true,
-			SkipExpiryCheck:   true,
-		},
-	)
-	_, err := verifier.Verify(ctx, rawToken)
-	if err != nil {
-		return nil, errors.Join(apperrors.ErrTokenSignature, err)
-	}
-
-	// Now doing expiration check
-	verifier = provider.Verifier(
-		&oidc3.Config{
-			ClientID:          clientID,
-			SkipClientIDCheck: skipClientIDCheck,
-			SkipIssuerCheck:   skipIssuerCheck,
-			SkipExpiryCheck:   false,
-		},
-	)
-
-	oToken, err := verifier.Verify(ctx, rawToken)
-	if err != nil {
-		return nil, err
-	}
-
-	return oToken, nil
 }
 
 func encryptToken(
@@ -761,19 +684,4 @@ func refreshUmaToken(
 
 	umaUser.RawToken = tok.AccessToken
 	return umaUser, nil
-}
-
-func parseRefreshToken(rawRefreshToken string) (*jwt.Claims, error) {
-	refreshToken, err := jwt.ParseSigned(rawRefreshToken)
-	if err != nil {
-		return nil, err
-	}
-
-	stdRefreshClaims := &jwt.Claims{}
-	err = refreshToken.UnsafeClaimsWithoutVerification(stdRefreshClaims)
-	if err != nil {
-		return nil, err
-	}
-
-	return stdRefreshClaims, nil
 }

@@ -24,6 +24,7 @@ import (
 	"net/http/pprof"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -221,5 +222,63 @@ func GetRedirectionURL(
 		}
 
 		return fmt.Sprintf("%s%s", redirect, withOAuthURI(constant.CallbackURL))
+	}
+}
+
+// ExpirationHandler checks if the token has expired
+func ExpirationHandler(
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
+	cookieAccessName string,
+) func(wrt http.ResponseWriter, req *http.Request) {
+	return func(wrt http.ResponseWriter, req *http.Request) {
+		user, err := getIdentity(req, cookieAccessName, "")
+		if err != nil {
+			wrt.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		if user.IsExpired() {
+			wrt.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		wrt.WriteHeader(http.StatusOK)
+	}
+}
+
+// TokenHandler display access token to screen
+func TokenHandler(
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
+	cookieAccessName string,
+	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
+) func(wrt http.ResponseWriter, req *http.Request) {
+	return func(wrt http.ResponseWriter, req *http.Request) {
+		user, err := getIdentity(req, cookieAccessName, "")
+		if err != nil {
+			accessError(wrt, req)
+			return
+		}
+
+		token, err := jwt.ParseSigned(user.RawToken)
+		if err != nil {
+			accessError(wrt, req)
+			return
+		}
+
+		jsonMap := make(map[string]interface{})
+		err = token.UnsafeClaimsWithoutVerification(&jsonMap)
+		if err != nil {
+			accessError(wrt, req)
+			return
+		}
+
+		result, err := json.Marshal(jsonMap)
+		if err != nil {
+			accessError(wrt, req)
+			return
+		}
+
+		wrt.Header().Set("Content-Type", "application/json")
+		_, _ = wrt.Write(result)
 	}
 }

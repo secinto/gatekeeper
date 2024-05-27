@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-jose/go-jose/v3/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
@@ -13,6 +14,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"go.uber.org/zap"
 )
 
@@ -230,4 +232,65 @@ func ExtractIdentity(token *jwt.JSONWebToken) (*models.UserContext, error) {
 		Claims:        jsonMap,
 		Permissions:   customClaims.Authorization,
 	}, nil
+}
+
+// retrieveRefreshToken retrieves the refresh token from store or cookie
+func RetrieveRefreshToken(
+	store storage.Storage,
+	cookieRefreshName string,
+	encryptionKey string,
+	req *http.Request,
+	user *models.UserContext,
+) (string, string, error) {
+	var token string
+	var err error
+
+	switch store != nil {
+	case true:
+		token, err = store.GetRefreshTokenFromStore(req.Context(), user.RawToken)
+	default:
+		token, err = GetRefreshTokenFromCookie(req, cookieRefreshName)
+	}
+
+	if err != nil {
+		return token, "", err
+	}
+
+	encrypted := token // returns encrypted, avoids encoding twice
+	token, err = encryption.DecodeText(token, encryptionKey)
+	return token, encrypted, err
+}
+
+// GetAccessCookieExpiration calculates the expiration of the access token cookie
+func GetAccessCookieExpiration(
+	logger *zap.Logger,
+	accessTokenDuration time.Duration,
+	refresh string,
+) time.Duration {
+	// notes: by default the duration of the access token will be the configuration option, if
+	// however we can decode the refresh token, we will set the duration to the duration of the
+	// refresh token
+	duration := accessTokenDuration
+
+	webToken, err := jwt.ParseSigned(refresh)
+	if err != nil {
+		logger.Error("unable to parse token")
+	}
+
+	if ident, err := ExtractIdentity(webToken); err == nil {
+		delta := time.Until(ident.ExpiresAt)
+
+		if delta > 0 {
+			duration = delta
+		}
+
+		logger.Debug(
+			"parsed refresh token with new duration",
+			zap.Duration("new duration", delta),
+		)
+	} else {
+		logger.Debug("refresh token is opaque and cannot be used to extend calculated duration")
+	}
+
+	return duration
 }
