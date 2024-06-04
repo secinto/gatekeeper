@@ -53,7 +53,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
-	proxycore "github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/handlers"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	gmiddleware "github.com/gogatekeeper/gatekeeper/pkg/proxy/middleware"
@@ -79,7 +79,7 @@ func init() {
 // NewProxy create's a new proxy from configuration
 //
 //nolint:cyclop
-func NewProxy(config *config.Config, log *zap.Logger, upstream reverseProxy) (*OauthProxy, error) {
+func NewProxy(config *config.Config, log *zap.Logger, upstream core.ReverseProxy) (*OauthProxy, error) {
 	var err error
 	// create the service logger
 	if log == nil {
@@ -98,7 +98,7 @@ func NewProxy(config *config.Config, log *zap.Logger, upstream reverseProxy) (*O
 		"starting the service",
 		zap.String("prog", constant.Prog),
 		zap.String("author", constant.Author),
-		zap.String("version", proxycore.Version),
+		zap.String("version", core.Version),
 	)
 
 	svc := &OauthProxy{
@@ -257,7 +257,7 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 		r.Config.ErrorPage,
 	)
 
-	r.accessForbidden = accessForbidden(
+	r.accessForbidden = core.AccessForbidden(
 		r.Log,
 		http.StatusForbidden,
 		r.Config.ForbiddenPage,
@@ -265,7 +265,7 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 		tmpl,
 	)
 
-	r.accessError = accessForbidden(
+	r.accessError = core.AccessForbidden(
 		r.Log,
 		http.StatusBadRequest,
 		r.Config.ErrorPage,
@@ -273,7 +273,7 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 		tmpl,
 	)
 
-	r.customSignInPage = customSignInPage(
+	r.customSignInPage = core.CustomSignInPage(
 		r.Log,
 		r.Config.SignInPage,
 		r.Config.Tags,
@@ -314,7 +314,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 	engine := chi.NewRouter()
 	r.useDefaultStack(engine)
 
-	r.WithOAuthURI = WithOAuthURI(r.Config.BaseURI, r.Config.OAuthURI)
+	r.WithOAuthURI = utils.WithOAuthURI(r.Config.BaseURI, r.Config.OAuthURI)
 	r.Cm = &cookie.Manager{
 		CookieDomain:         r.Config.CookieDomain,
 		BaseURI:              r.Config.BaseURI,
@@ -333,7 +333,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		NoRedirects:          r.Config.NoRedirects,
 	}
 
-	r.newOAuth2Config = newOAuth2Config(
+	r.newOAuth2Config = utils.NewOAuth2Config(
 		r.Config.ClientID,
 		r.Config.ClientSecret,
 		r.Provider.Endpoint().AuthURL,
@@ -359,7 +359,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.WithOAuthURI,
 	)
 
-	redToAuth := redirectToAuthorization(
+	redToAuth := core.RedirectToAuthorization(
 		r.Log,
 		r.Config.NoRedirects,
 		r.Cm,
@@ -390,7 +390,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		engine.Use(corsHandler.Handler)
 	}
 
-	proxyMiddle := proxyMiddleware(
+	proxyMiddle := gmiddleware.ProxyMiddleware(
 		r.Log,
 		r.Config.CorsOrigins,
 		r.Config.Headers,

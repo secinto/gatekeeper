@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"net/http"
 	"strconv"
 	"time"
 )
@@ -32,4 +33,9 @@ func GetVersion() string {
 type OauthProxies interface {
 	CreateReverseProxy() error
 	Run() error
+}
+
+// ReverseProxy is a wrapper
+type ReverseProxy interface {
+	ServeHTTP(rw http.ResponseWriter, req *http.Request)
 }

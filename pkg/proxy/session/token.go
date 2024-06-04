@@ -2,8 +2,11 @@ package session
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -13,9 +16,12 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
+	"github.com/grokify/go-pkce"
 	"go.uber.org/zap"
+	"golang.org/x/oauth2"
 )
 
 // GetRefreshTokenFromCookie returns the refresh token from the cookie if any
@@ -293,4 +299,122 @@ func GetAccessCookieExpiration(
 	}
 
 	return duration
+}
+
+func GetCodeFlowTokens(
+	scope *models.RequestScope,
+	writer http.ResponseWriter,
+	req *http.Request,
+	enablePKCE bool,
+	cookiePKCEName string,
+	idpClient *http.Client,
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
+	newOAuth2Config func(redirectionURL string) *oauth2.Config,
+	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
+) (string, string, string, error) {
+	// step: ensure we have a authorization code
+	code := req.URL.Query().Get("code")
+
+	if code == "" {
+		accessError(writer, req)
+		return "", "", "", fmt.Errorf("missing auth code")
+	}
+
+	conf := newOAuth2Config(getRedirectionURL(writer, req))
+
+	var codeVerifier *http.Cookie
+
+	if enablePKCE {
+		var err error
+		codeVerifier, err = req.Cookie(cookiePKCEName)
+		if err != nil {
+			scope.Logger.Error("problem getting pkce cookie", zap.Error(err))
+			accessForbidden(writer, req)
+			return "", "", "", err
+		}
+	}
+
+	resp, err := exchangeAuthenticationCode(
+		req.Context(),
+		conf,
+		code,
+		codeVerifier,
+		idpClient,
+	)
+	if err != nil {
+		scope.Logger.Error("unable to exchange code for access token", zap.Error(err))
+		accessForbidden(writer, req)
+		return "", "", "", err
+	}
+
+	idToken, assertOk := resp.Extra("id_token").(string)
+	if !assertOk {
+		scope.Logger.Error("unable to obtain id token", zap.Error(err))
+		accessForbidden(writer, req)
+		return "", "", "", err
+	}
+
+	return resp.AccessToken, idToken, resp.RefreshToken, nil
+}
+
+// exchangeAuthenticationCode exchanges the authentication code with the oauth server for a access token
+func exchangeAuthenticationCode(
+	ctx context.Context,
+	oConfig *oauth2.Config,
+	code string,
+	codeVerifierCookie *http.Cookie,
+	httpClient *http.Client,
+) (*oauth2.Token, error) {
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
+	start := time.Now()
+	authCodeOptions := []oauth2.AuthCodeOption{}
+
+	if codeVerifierCookie != nil {
+		if codeVerifierCookie.Value == "" {
+			return nil, apperrors.ErrPKCECookieEmpty
+		}
+		authCodeOptions = append(
+			authCodeOptions,
+			oauth2.SetAuthURLParam(pkce.ParamCodeVerifier, codeVerifierCookie.Value),
+		)
+	}
+
+	token, err := oConfig.Exchange(ctx, code, authCodeOptions...)
+	if err != nil {
+		return token, err
+	}
+
+	taken := time.Since(start).Seconds()
+	metrics.OauthTokensMetric.WithLabelValues("exchange").Inc()
+	metrics.OauthLatencyMetric.WithLabelValues("exchange").Observe(taken)
+
+	return token, err
+}
+
+func GetRequestURIFromCookie(
+	scope *models.RequestScope,
+	encodedRequestURI *http.Cookie,
+) string {
+	// some clients URL-escape padding characters
+	unescapedValue, err := url.PathUnescape(encodedRequestURI.Value)
+	if err != nil {
+		scope.Logger.Warn(
+			"app did send a corrupted redirectURI in cookie: invalid url escaping",
+			zap.Error(err),
+		)
+	}
+	// Since the value is passed with a cookie, we do not expect the client to use base64url (but the
+	// base64-encoded value may itself be url-encoded).
+	// This is safe for browsers using atob() but needs to be treated with care for nodeJS clients,
+	// which natively use base64url encoding, and url-escape padding '=' characters.
+	decoded, err := base64.StdEncoding.DecodeString(unescapedValue)
+	if err != nil {
+		scope.Logger.Warn(
+			"app did send a corrupted redirectURI in cookie: invalid base64url encoding",
+			zap.Error(err),
+			zap.String("encoded_value", unescapedValue))
+	}
+
+	return string(decoded)
 }

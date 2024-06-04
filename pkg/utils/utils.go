@@ -347,3 +347,14 @@ func GenerateHmac(req *http.Request, encKey string) (string, error) {
 
 	return hexHmac, nil
 }
+
+// WithOAuthURI returns the oauth uri
+func WithOAuthURI(baseURI string, oauthURI string) func(uri string) string {
+	return func(uri string) string {
+		uri = strings.TrimPrefix(uri, "/")
+		if baseURI != "" {
+			return fmt.Sprintf("%s/%s/%s", baseURI, oauthURI, uri)
+		}
+		return fmt.Sprintf("%s/%s", oauthURI, uri)
+	}
+}

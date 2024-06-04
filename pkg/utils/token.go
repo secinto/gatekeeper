@@ -250,3 +250,73 @@ func CheckClaim(
 	lLog.Warn("unexpected error")
 	return false
 }
+
+// VerifyOIDCTokens
+func VerifyOIDCTokens(
+	ctx context.Context,
+	provider *oidc3.Provider,
+	clientID string,
+	rawAccessToken string,
+	rawIDToken string,
+	skipClientIDCheck bool,
+	skipIssuerCheck bool,
+) (*oidc3.IDToken, *oidc3.IDToken, error) {
+	var oIDToken *oidc3.IDToken
+	var oAccToken *oidc3.IDToken
+	var err error
+
+	oIDToken, err = VerifyToken(ctx, provider, rawIDToken, clientID, false, false)
+	if err != nil {
+		return nil, nil, errors.Join(apperrors.ErrVerifyIDToken, err)
+	}
+
+	// check https://openid.net/specs/openid-connect-core-1_0.html#ImplicitIDToken - at_hash
+	// keycloak seems doesnt support yet at_hash
+	// https://stackoverflow.com/questions/60818373/configure-keycloak-to-include-an-at-hash-claim-in-the-id-token
+	if oIDToken.AccessTokenHash != "" {
+		err = oIDToken.VerifyAccessToken(rawAccessToken)
+		if err != nil {
+			return nil, nil, errors.Join(apperrors.ErrAccTokenVerifyFailure, err)
+		}
+	}
+
+	oAccToken, err = VerifyToken(
+		ctx,
+		provider,
+		rawAccessToken,
+		clientID,
+		skipClientIDCheck,
+		skipIssuerCheck,
+	)
+	if err != nil {
+		return nil, nil, errors.Join(apperrors.ErrAccTokenVerifyFailure, err)
+	}
+
+	return oAccToken, oIDToken, nil
+}
+
+// NewOAuth2Config returns a oauth2 config
+func NewOAuth2Config(
+	clientID string,
+	clientSecret string,
+	authURL string,
+	tokenURL string,
+	scopes []string,
+) func(redirectionURL string) *oauth2.Config {
+	return func(redirectionURL string) *oauth2.Config {
+		defaultScope := []string{"openid"}
+
+		conf := &oauth2.Config{
+			ClientID:     clientID,
+			ClientSecret: clientSecret,
+			Endpoint: oauth2.Endpoint{
+				AuthURL:  authURL,
+				TokenURL: tokenURL,
+			},
+			RedirectURL: redirectionURL,
+			Scopes:      append(scopes, defaultScope...),
+		}
+
+		return conf
+	}
+}

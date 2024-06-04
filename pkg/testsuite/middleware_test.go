@@ -59,7 +59,7 @@ func TestMetricsMiddleware(t *testing.T) {
 	cfg.EnableRefreshTokens = true
 	cfg.EnableEncryptedToken = true
 	cfg.EncryptionKey = testEncryptionKey
-	uri := proxy.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.MetricsURL)
+	uri := utils.WithOAuthURI(cfg.BaseURI, cfg.OAuthURI)(constant.MetricsURL)
 	requests := []fakeRequest{
 		{
 			URI:       FakeAuthAllURL,

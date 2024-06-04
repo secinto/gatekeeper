@@ -11,6 +11,7 @@ import (
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"go.uber.org/zap"
@@ -27,11 +28,6 @@ type RPT struct {
 	m     sync.RWMutex
 }
 
-// reverseProxy is a wrapper
-type reverseProxy interface {
-	ServeHTTP(rw http.ResponseWriter, req *http.Request)
-}
-
 type OauthProxy struct {
 	Provider          *oidc3.Provider
 	Config            *config.Config
@@ -44,7 +40,7 @@ type OauthProxy struct {
 	adminRouter       http.Handler
 	Server            *http.Server
 	Store             storage.Storage
-	Upstream          reverseProxy
+	Upstream          core.ReverseProxy
 	pat               *PAT
 	rpt               *RPT
 	accessForbidden   func(wrt http.ResponseWriter, req *http.Request) context.Context

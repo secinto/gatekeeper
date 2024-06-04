@@ -35,6 +35,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/handlers"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
@@ -154,7 +155,7 @@ func oauthAuthorizationHandler(
 		}
 
 		scope.Logger.Debug("redirecting to auth_url", zap.String("auth_url", authURL))
-		redirectToURL(scope.Logger, authURL, wrt, req, http.StatusSeeOther)
+		core.RedirectToURL(scope.Logger, authURL, wrt, req, http.StatusSeeOther)
 	}
 }
 
@@ -203,13 +204,13 @@ func oauthCallbackHandler(
 		}
 
 		scope.Logger.Debug("callback handler")
-		accessToken, identityToken, refreshToken, err := getCodeFlowTokens(
+		accessToken, identityToken, refreshToken, err := session.GetCodeFlowTokens(
 			scope,
 			writer,
 			req,
 			enablePKCE,
 			cookiePKCEName,
-			idpClient,
+			idpClient.RestyClient().GetClient(),
 			accessForbidden,
 			accessError,
 			newOAuth2Config,
@@ -220,7 +221,7 @@ func oauthCallbackHandler(
 		}
 
 		rawAccessToken := accessToken
-		oAccToken, _, err := verifyOIDCTokens(
+		oAccToken, _, err := utils.VerifyOIDCTokens(
 			req.Context(),
 			provider,
 			clientID,
@@ -272,7 +273,7 @@ func oauthCallbackHandler(
 			}
 
 			oidcTokensCookiesExp = time.Until(stdRefreshClaims.Expiry.Time())
-			encrypted, err = encryptToken(scope, refreshToken, encryptionKey, "refresh", writer)
+			encrypted, err = core.EncryptToken(scope, refreshToken, encryptionKey, "refresh", writer)
 			if err != nil {
 				return
 			}
@@ -297,7 +298,7 @@ func oauthCallbackHandler(
 		redirectURI := "/"
 		if req.URL.Query().Get("state") != "" {
 			if encodedRequestURI, _ := req.Cookie(cookieRequestURIName); encodedRequestURI != nil {
-				redirectURI = getRequestURIFromCookie(scope, encodedRequestURI)
+				redirectURI = session.GetRequestURIFromCookie(scope, encodedRequestURI)
 			}
 		}
 
@@ -338,18 +339,18 @@ func oauthCallbackHandler(
 
 		// step: are we encrypting the access token?
 		if enableEncryptedToken || forceEncryptedCookie {
-			accessToken, err = encryptToken(scope, accessToken, encryptionKey, "access", writer)
+			accessToken, err = core.EncryptToken(scope, accessToken, encryptionKey, "access", writer)
 			if err != nil {
 				return
 			}
 
-			identityToken, err = encryptToken(scope, identityToken, encryptionKey, "id", writer)
+			identityToken, err = core.EncryptToken(scope, identityToken, encryptionKey, "id", writer)
 			if err != nil {
 				return
 			}
 
 			if enableUma && umaError == nil {
-				umaToken, err = encryptToken(scope, umaToken, encryptionKey, "uma", writer)
+				umaToken, err = core.EncryptToken(scope, umaToken, encryptionKey, "uma", writer)
 				if err != nil {
 					return
 				}
@@ -373,7 +374,7 @@ func oauthCallbackHandler(
 		}
 
 		scope.Logger.Debug("redirecting to", zap.String("location", redirectURI))
-		redirectToURL(scope.Logger, redirectURI, writer, req, http.StatusSeeOther)
+		core.RedirectToURL(scope.Logger, redirectURI, writer, req, http.StatusSeeOther)
 	}
 }
 
@@ -747,7 +748,7 @@ func logoutHandler(
 				postLogoutParams,
 			)
 
-			redirectToURL(
+			core.RedirectToURL(
 				scope.Logger,
 				sendTo,
 				writer,
@@ -829,7 +830,7 @@ func logoutHandler(
 
 		// step: should we redirect the user
 		if redirectURL != "" {
-			redirectToURL(scope.Logger, redirectURL, writer, req, http.StatusSeeOther)
+			core.RedirectToURL(scope.Logger, redirectURL, writer, req, http.StatusSeeOther)
 		}
 	}
 }
