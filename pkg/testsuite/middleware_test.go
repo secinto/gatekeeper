@@ -2515,6 +2515,7 @@ func TestLogRealIP(t *testing.T) {
 
 	cfg := newFakeKeycloakConfig()
 	cfg.EnableLogging = true
+	cfg.Verbose = true
 
 	var buffer bytes.Buffer
 	writer := bufio.NewWriter(&buffer)

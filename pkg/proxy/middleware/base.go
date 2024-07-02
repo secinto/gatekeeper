@@ -103,25 +103,24 @@ func LoggingMiddleware(
 				return
 			}
 
+			addr := utils.RealIP(req)
 			if verbose {
 				requestLogger := logger.With(
 					zap.Any("headers", req.Header),
 					zap.String("path", req.URL.Path),
 					zap.String("method", req.Method),
+					zap.String("client_ip", addr),
 				)
 				scope.Logger = requestLogger
 			}
 
 			next.ServeHTTP(resp, req)
 
-			addr := utils.RealIP(req)
-
 			if req.URL.Path == req.URL.RawPath || req.URL.RawPath == "" {
 				scope.Logger.Info("client request",
 					zap.Duration("latency", time.Since(start)),
 					zap.Int("status", resp.Status()),
 					zap.Int("bytes", resp.BytesWritten()),
-					zap.String("client_ip", addr),
 					zap.String("remote_addr", req.RemoteAddr),
 					zap.String("method", req.Method),
 					zap.String("path", req.URL.Path))
@@ -130,7 +129,6 @@ func LoggingMiddleware(
 					zap.Duration("latency", time.Since(start)),
 					zap.Int("status", resp.Status()),
 					zap.Int("bytes", resp.BytesWritten()),
-					zap.String("client_ip", addr),
 					zap.String("remote_addr", req.RemoteAddr),
 					zap.String("method", req.Method),
 					zap.String("path", req.URL.Path),

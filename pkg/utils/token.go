@@ -179,7 +179,7 @@ func CheckClaim(
 	errFields := []zapcore.Field{
 		zap.String("claim", claimName),
 		zap.String("access", "denied"),
-		zap.String("email", user.Email),
+		zap.String("userID", user.ID),
 		zap.String("resource", resourceURL),
 	}
 
@@ -236,6 +236,10 @@ func CheckClaim(
 
 		lLog.Warn(
 			"claim requirement does not match claim in token",
+		)
+
+		lLog.Debug(
+			"claims",
 			zap.String("issued", claims),
 			zap.String("required", match.String()),
 		)

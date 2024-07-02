@@ -57,7 +57,6 @@ func AuthenticationMiddleware(
 				return
 			}
 
-			clientIP := utils.RealIP(req)
 			scope.Logger.Debug("authentication middleware")
 
 			// grab the user identity from the request
@@ -71,9 +70,7 @@ func AuthenticationMiddleware(
 			scope.Identity = user
 			ctx := context.WithValue(req.Context(), constant.ContextScopeName, scope)
 			lLog := scope.Logger.With(
-				zap.String("client_ip", clientIP),
 				zap.String("remote_addr", req.RemoteAddr),
-				zap.String("username", user.Name),
 				zap.String("sub", user.ID),
 				zap.String("expired_on", user.ExpiresAt.String()),
 			)
