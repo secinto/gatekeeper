@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -461,7 +461,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 					ExpectedCookies: map[string]string{cfg.CookieAccessName: ""},
 					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
 						cfg.CookieAccessName: func(t *testing.T, config *config.Config, rawToken string) bool {
-							token, err := jwt.ParseSigned(rawToken)
+							token, err := jwt.ParseSigned(rawToken, constant.SignatureAlgs[:])
 							if err != nil {
 								return false
 							}
@@ -512,7 +512,7 @@ func TestTokenEncryptionLoginHandler(t *testing.T) {
 					},
 					ExpectedCookiesValidator: map[string]func(*testing.T, *config.Config, string) bool{
 						cfg.CookieAccessName: func(t *testing.T, config *config.Config, rawToken string) bool {
-							token, err := jwt.ParseSigned(rawToken)
+							token, err := jwt.ParseSigned(rawToken, constant.SignatureAlgs[:])
 							if err != nil {
 								return false
 							}

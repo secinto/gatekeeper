@@ -17,8 +17,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	jose2 "github.com/go-jose/go-jose/v3"
-	"github.com/go-jose/go-jose/v3/jwt"
+	jose2 "github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
@@ -126,7 +126,7 @@ func (t *FakeToken) GetToken() (string, error) {
 	}
 
 	b := jwt.Signed(signer).Claims(&t.Claims)
-	jwt, err := b.CompactSerialize()
+	jwt, err := b.Serialize()
 	if err != nil {
 		return "", err
 	}
@@ -158,7 +158,7 @@ func (t *FakeToken) GetUnsignedToken() (string, error) {
 	}
 
 	b := jwt.Signed(signer).Claims(&t.Claims)
-	jwt, err := b.CompactSerialize()
+	jwt, err := b.Serialize()
 
 	if err != nil {
 		return "", err
@@ -484,7 +484,7 @@ func (r *fakeAuthServer) userInfoHandler(wrt http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	token, err := jwt.ParseSigned(items[1])
+	token, err := jwt.ParseSigned(items[1], constant.SignatureAlgs[:])
 
 	if err != nil {
 		wrt.WriteHeader(http.StatusUnauthorized)
@@ -615,7 +615,7 @@ func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Requ
 			"error_description": "invalid client credentials",
 		})
 	case configcore.GrantTypeRefreshToken:
-		oldRefreshToken, err := jwt.ParseSigned(req.FormValue("refresh_token"))
+		oldRefreshToken, err := jwt.ParseSigned(req.FormValue("refresh_token"), constant.SignatureAlgs[:])
 
 		if err != nil {
 			writer.WriteHeader(http.StatusInternalServerError)

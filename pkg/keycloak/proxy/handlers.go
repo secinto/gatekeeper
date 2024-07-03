@@ -30,7 +30,8 @@ import (
 
 	"github.com/Nerzal/gocloak/v12"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -452,7 +453,7 @@ func loginHandler(
 
 			accessToken := token.AccessToken
 			refreshToken := ""
-			accessTokenObj, err := jwt.ParseSigned(token.AccessToken)
+			accessTokenObj, err := jwt.ParseSigned(token.AccessToken, []jose.SignatureAlgorithm{jose.RS256})
 			if err != nil {
 				return http.StatusNotImplemented,
 					errors.Join(apperrors.ErrParseAccessToken, err)
@@ -523,7 +524,7 @@ func loginHandler(
 				var expiration time.Duration
 				// notes: not all idp refresh tokens are readable, google for example, so we attempt to decode into
 				// a jwt and if possible extract the expiration, else we default to 10 days
-				refreshTokenObj, errRef := jwt.ParseSigned(token.RefreshToken)
+				refreshTokenObj, errRef := jwt.ParseSigned(token.RefreshToken, constant.SignatureAlgs[:])
 				if errRef != nil {
 					return http.StatusInternalServerError,
 						errors.Join(apperrors.ErrParseRefreshToken, err)

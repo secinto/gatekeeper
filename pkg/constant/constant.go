@@ -1,6 +1,10 @@
 package constant
 
-import "time"
+import (
+	"time"
+
+	"github.com/go-jose/go-jose/v4"
+)
 
 type contextKey int8
 
@@ -72,3 +76,5 @@ const (
 
 	InvalidCookieDuration = -10 * time.Hour
 )
+
+var SignatureAlgs = [3]jose.SignatureAlgorithm{jose.RS256, jose.HS256, jose.HS512}

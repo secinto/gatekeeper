@@ -30,7 +30,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
@@ -136,7 +136,7 @@ func TestAuthTokenHeader(t *testing.T) {
 					ExpectedCode:  http.StatusOK,
 					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
 						"X-Auth-Token": func(t *testing.T, c *config.Config, value string) {
-							_, err := jwt.ParseSigned(value)
+							_, err := jwt.ParseSigned(value, constant.SignatureAlgs[:])
 							require.NoError(t, err, "Problem parsing X-Auth-Token")
 							assert.False(t, checkAccessTokenEncryption(t, c, value))
 						},
@@ -147,7 +147,7 @@ func TestAuthTokenHeader(t *testing.T) {
 					ExpectedProxy: true,
 					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
 						"X-Auth-Token": func(t *testing.T, c *config.Config, value string) {
-							_, err := jwt.ParseSigned(value)
+							_, err := jwt.ParseSigned(value, constant.SignatureAlgs[:])
 							require.NoError(t, err, "Problem parsing X-Auth-Token")
 							assert.False(t, checkAccessTokenEncryption(t, c, value))
 						},
@@ -173,7 +173,7 @@ func TestAuthTokenHeader(t *testing.T) {
 					ExpectedCode:  http.StatusOK,
 					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
 						"X-Auth-Token": func(t *testing.T, c *config.Config, value string) {
-							_, err := jwt.ParseSigned(value)
+							_, err := jwt.ParseSigned(value, constant.SignatureAlgs[:])
 							require.NoError(t, err, "Problem parsing X-Auth-Token")
 							assert.False(t, checkAccessTokenEncryption(t, c, value))
 						},
@@ -184,7 +184,7 @@ func TestAuthTokenHeader(t *testing.T) {
 					ExpectedProxy: true,
 					ExpectedProxyHeadersValidator: map[string]func(*testing.T, *config.Config, string){
 						"X-Auth-Token": func(t *testing.T, c *config.Config, value string) {
-							_, err := jwt.ParseSigned(value)
+							_, err := jwt.ParseSigned(value, constant.SignatureAlgs[:])
 							require.NoError(t, err, "Problem parsing X-Auth-Token")
 							assert.False(t, checkAccessTokenEncryption(t, c, value))
 						},

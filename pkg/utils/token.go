@@ -10,8 +10,9 @@ import (
 	"time"
 
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
+	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/metrics"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
 	"go.uber.org/zap"
@@ -63,7 +64,7 @@ func VerifyToken(
 }
 
 func ParseRefreshToken(rawRefreshToken string) (*jwt.Claims, error) {
-	refreshToken, err := jwt.ParseSigned(rawRefreshToken)
+	refreshToken, err := jwt.ParseSigned(rawRefreshToken, constant.SignatureAlgs[:])
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +115,7 @@ func GetRefreshedToken(
 	metrics.OauthTokensMetric.WithLabelValues("renew").Inc()
 	metrics.OauthLatencyMetric.WithLabelValues("renew").Observe(taken)
 
-	token, err := jwt.ParseSigned(tkn.AccessToken)
+	token, err := jwt.ParseSigned(tkn.AccessToken, constant.SignatureAlgs[:])
 	if err != nil {
 		return jwt.JSONWebToken{},
 			"",
@@ -124,7 +125,7 @@ func GetRefreshedToken(
 			err
 	}
 
-	refreshToken, err := jwt.ParseSigned(tkn.RefreshToken)
+	refreshToken, err := jwt.ParseSigned(tkn.RefreshToken, constant.SignatureAlgs[:])
 	if err != nil {
 		return jwt.JSONWebToken{},
 			"",

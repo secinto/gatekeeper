@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
@@ -151,7 +151,7 @@ func GetIdentity(
 		}
 
 		rawToken := access
-		token, err := jwt.ParseSigned(access)
+		token, err := jwt.ParseSigned(access, constant.SignatureAlgs[:])
 		if err != nil {
 			return nil, err
 		}
@@ -278,7 +278,7 @@ func GetAccessCookieExpiration(
 	// refresh token
 	duration := accessTokenDuration
 
-	webToken, err := jwt.ParseSigned(refresh)
+	webToken, err := jwt.ParseSigned(refresh, constant.SignatureAlgs[:])
 	if err != nil {
 		logger.Error("unable to parse token")
 	}

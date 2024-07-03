@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	"github.com/gogatekeeper/gatekeeper/pkg/keycloak/config"
@@ -260,7 +260,7 @@ func TestGetUserContext(t *testing.T) {
 	token.addClientRoles("client", []string{"client"})
 	jwtToken, err := token.GetToken()
 	require.NoError(t, err)
-	webToken, err := jwt.ParseSigned(jwtToken)
+	webToken, err := jwt.ParseSigned(jwtToken, constant.SignatureAlgs[:])
 	require.NoError(t, err)
 	context, err := session.ExtractIdentity(webToken)
 	require.NoError(t, err)
@@ -277,7 +277,7 @@ func TestGetUserRealmRoleContext(t *testing.T) {
 	token.addRealmRoles(roles)
 	jwtToken, err := token.GetToken()
 	require.NoError(t, err)
-	webToken, err := jwt.ParseSigned(jwtToken)
+	webToken, err := jwt.ParseSigned(jwtToken, constant.SignatureAlgs[:])
 	require.NoError(t, err)
 	context, err := session.ExtractIdentity(webToken)
 	require.NoError(t, err)
@@ -294,7 +294,7 @@ func TestUserContextString(t *testing.T) {
 	token := NewTestToken("test")
 	jwtToken, err := token.GetToken()
 	require.NoError(t, err)
-	webToken, err := jwt.ParseSigned(jwtToken)
+	webToken, err := jwt.ParseSigned(jwtToken, constant.SignatureAlgs[:])
 	require.NoError(t, err)
 	context, err := session.ExtractIdentity(webToken)
 	require.NoError(t, err)

@@ -25,7 +25,7 @@ import (
 
 	"github.com/Nerzal/gocloak/v12"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	configcore "github.com/gogatekeeper/gatekeeper/pkg/config/core"
@@ -125,7 +125,7 @@ func getPAT(
 
 		initialized = true
 
-		parsedToken, err := jwt.ParseSigned(token.AccessToken)
+		parsedToken, err := jwt.ParseSigned(token.AccessToken, constant.SignatureAlgs[:])
 		if err != nil {
 			retry++
 			logger.Error("failed to parse the access token", zap.Error(err))
@@ -324,7 +324,7 @@ func refreshUmaToken(
 		return nil, err
 	}
 
-	token, err := jwt.ParseSigned(tok.AccessToken)
+	token, err := jwt.ParseSigned(tok.AccessToken, constant.SignatureAlgs[:])
 	if err != nil {
 		return nil, err
 	}

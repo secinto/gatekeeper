@@ -47,7 +47,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/session"
 	"github.com/gogatekeeper/gatekeeper/pkg/utils"
 
-	"github.com/go-jose/go-jose/v3/jwt"
+	"github.com/go-jose/go-jose/v4/jwt"
 
 	opaserver "github.com/open-policy-agent/opa/server"
 )
@@ -1649,7 +1649,7 @@ func checkAccessTokenEncryption(t *testing.T, cfg *config.Config, value string) 
 		return false
 	}
 
-	token, err := jwt.ParseSigned(rawToken)
+	token, err := jwt.ParseSigned(rawToken, constant.SignatureAlgs[:])
 
 	if err != nil {
 		return false
@@ -1671,7 +1671,7 @@ func checkRefreshTokenEncryption(_ *testing.T, cfg *config.Config, value string)
 		return false
 	}
 
-	_, err = jwt.ParseSigned(rawToken)
+	_, err = jwt.ParseSigned(rawToken, constant.SignatureAlgs[:])
 
 	return err == nil
 }
