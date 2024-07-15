@@ -63,6 +63,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
+
+	_ "go.uber.org/automaxprocs" // fixes golang cgroup issue
 	"go.uber.org/zap"
 )
 
