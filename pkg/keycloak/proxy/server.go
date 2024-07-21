@@ -320,7 +320,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 	engine := chi.NewRouter()
 	r.useDefaultStack(engine)
 
-	r.WithOAuthURI = utils.WithOAuthURI(r.Config.BaseURI, r.Config.OAuthURI)
+	WithOAuthURI := utils.WithOAuthURI(r.Config.BaseURI, r.Config.OAuthURI)
 	r.Cm = &cookie.Manager{
 		CookieDomain:         r.Config.CookieDomain,
 		BaseURI:              r.Config.BaseURI,
@@ -362,7 +362,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.NoRedirects,
 		r.Config.SecureCookie,
 		r.Config.CookieOAuthStateName,
-		r.WithOAuthURI,
+		WithOAuthURI,
 	)
 
 	redToAuth := core.RedirectToAuthorization(
@@ -419,7 +419,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 
 	r.Log.Info(
 		"enabled health service",
-		zap.String("path", path.Clean(r.WithOAuthURI(constant.HealthURL))),
+		zap.String("path", path.Clean(WithOAuthURI(constant.HealthURL))),
 	)
 
 	adminEngine.Get(constant.HealthURL, handlers.HealthHandler)
@@ -427,7 +427,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 	if r.Config.EnableMetrics {
 		r.Log.Info(
 			"enabled the service metrics middleware",
-			zap.String("path", path.Clean(r.WithOAuthURI(constant.MetricsURL))),
+			zap.String("path", path.Clean(WithOAuthURI(constant.MetricsURL))),
 		)
 		adminEngine.Get(
 			constant.MetricsURL,
@@ -558,7 +558,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			handlers.TokenHandler(r.GetIdentity, r.Config.CookieAccessName, r.accessError),
 		)
 		eng.Post(constant.LoginURL, loginHand)
-		eng.Get(constant.DiscoveryURL, handlers.DiscoveryHandler(r.Log, r.WithOAuthURI))
+		eng.Get(constant.DiscoveryURL, handlers.DiscoveryHandler(r.Log, WithOAuthURI))
 
 		if r.Config.ListenAdmin == "" {
 			eng.Mount("/", adminEngine)
