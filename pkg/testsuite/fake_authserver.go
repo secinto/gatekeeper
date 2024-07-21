@@ -327,7 +327,7 @@ func newFakeAuthServer(config *fakeAuthConfig) *fakeAuthServer {
 		},
 	}
 
-	baseURI := fmt.Sprintf("%s/realms/hod-test", config.DiscoveryURLPrefix)
+	baseURI := config.DiscoveryURLPrefix + "/realms/hod-test"
 
 	router := chi.NewRouter()
 	router.Use(middleware.Recoverer)

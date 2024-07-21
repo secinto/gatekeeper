@@ -196,7 +196,6 @@ func TestAuthTokenHeader(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfgCopy := *cfg
 		c := &cfgCopy
 		t.Run(
@@ -323,7 +322,7 @@ func TestForwardingProxy(t *testing.T) {
 					FormValues: map[string]string{
 						"Name": "Whatever",
 					},
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Contains(t, body, FakeTestURL)
 						assert.Contains(t, body, "method")
 						assert.Contains(t, body, "Whatever")
@@ -399,7 +398,6 @@ func TestForwardingProxy(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -537,7 +535,6 @@ func TestUmaForwardingProxy(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -677,7 +674,7 @@ func TestEnableHmacForwardingProxy(t *testing.T) {
 					ProxyRequest:  true,
 					ExpectedProxy: false,
 					ExpectedCode:  http.StatusBadRequest,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -686,7 +683,6 @@ func TestEnableHmacForwardingProxy(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -780,7 +776,6 @@ func TestErrorTemplate(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfgCopy := *cfg
 		c := &cfgCopy
 		t.Run(
@@ -853,7 +848,6 @@ func TestSkipOpenIDProviderTLSVerify(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1014,7 +1008,7 @@ func TestDefaultDenial(t *testing.T) {
 				{
 					URI:       "/not_permited",
 					Redirects: false,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -1024,7 +1018,7 @@ func TestDefaultDenial(t *testing.T) {
 					URI:          "/not_permited",
 					Redirects:    false,
 					ExpectedCode: http.StatusNotImplemented,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -1033,7 +1027,7 @@ func TestDefaultDenial(t *testing.T) {
 					URI:          "/not_permited",
 					Redirects:    true,
 					ExpectedCode: http.StatusNotImplemented,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -1043,7 +1037,7 @@ func TestDefaultDenial(t *testing.T) {
 					URI:          "/not_permited",
 					Redirects:    false,
 					ExpectedCode: http.StatusNotImplemented,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -1055,7 +1049,7 @@ func TestDefaultDenial(t *testing.T) {
 					ExpectedProxy: false,
 					Redirects:     false,
 					ExpectedCode:  http.StatusNotImplemented,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -1067,7 +1061,7 @@ func TestDefaultDenial(t *testing.T) {
 					ExpectedProxy: true,
 					Redirects:     false,
 					ExpectedCode:  http.StatusOK,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Contains(t, body, "gzip")
 					},
 				},
@@ -1101,7 +1095,7 @@ func TestDefaultDenial(t *testing.T) {
 					ExpectedProxy: false,
 					Redirects:     false,
 					ExpectedCode:  http.StatusUnauthorized,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Contains(t, body, "")
 					},
 				},
@@ -1113,7 +1107,7 @@ func TestDefaultDenial(t *testing.T) {
 					ExpectedProxy: true,
 					Redirects:     false,
 					ExpectedCode:  http.StatusOK,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Contains(t, body, "gzip")
 					},
 				},
@@ -1122,7 +1116,6 @@ func TestDefaultDenial(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		c := *cfg
 		t.Run(
 			testCase.Name,
@@ -1163,7 +1156,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 		{
 			URI:       "/not_permited",
 			Redirects: false,
-			ExpectedContent: func(body string, testNum int) {
+			ExpectedContent: func(body string, _ int) {
 				assert.Equal(t, "", body)
 			},
 		},
@@ -1173,7 +1166,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			URI:          "/not_permited",
 			Redirects:    false,
 			ExpectedCode: http.StatusNotImplemented,
-			ExpectedContent: func(body string, testNum int) {
+			ExpectedContent: func(body string, _ int) {
 				assert.Equal(t, "", body)
 			},
 		},
@@ -1183,7 +1176,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			URI:          "/not_permited",
 			Redirects:    false,
 			ExpectedCode: http.StatusNotImplemented,
-			ExpectedContent: func(body string, testNum int) {
+			ExpectedContent: func(body string, _ int) {
 				assert.Equal(t, "", body)
 			},
 		},
@@ -1195,7 +1188,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			ExpectedProxy: false,
 			Redirects:     false,
 			ExpectedCode:  http.StatusForbidden,
-			ExpectedContent: func(body string, testNum int) {
+			ExpectedContent: func(body string, _ int) {
 				assert.Equal(t, "", body)
 			},
 		},
@@ -1207,7 +1200,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			ExpectedProxy: false,
 			Redirects:     true,
 			ExpectedCode:  http.StatusForbidden,
-			ExpectedContent: func(body string, testNum int) {
+			ExpectedContent: func(body string, _ int) {
 				assert.Equal(t, "", body)
 			},
 		},
@@ -1219,7 +1212,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			ExpectedProxy: true,
 			Redirects:     false,
 			ExpectedCode:  http.StatusOK,
-			ExpectedContent: func(body string, testNum int) {
+			ExpectedContent: func(body string, _ int) {
 				assert.Contains(t, body, "gzip")
 			},
 		},
@@ -1231,7 +1224,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			ExpectedProxy: false,
 			Redirects:     false,
 			ExpectedCode:  http.StatusForbidden,
-			ExpectedContent: func(body string, testNum int) {
+			ExpectedContent: func(body string, _ int) {
 				assert.Equal(t, "", body)
 			},
 		},
@@ -1243,7 +1236,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			ExpectedProxy: true,
 			Redirects:     false,
 			ExpectedCode:  http.StatusOK,
-			ExpectedContent: func(body string, testNum int) {
+			ExpectedContent: func(body string, _ int) {
 				assert.Contains(t, body, "gzip")
 			},
 		},
@@ -1255,7 +1248,7 @@ func TestDefaultDenialStrict(t *testing.T) {
 			ExpectedProxy: false,
 			Redirects:     false,
 			ExpectedCode:  http.StatusForbidden,
-			ExpectedContent: func(body string, testNum int) {
+			ExpectedContent: func(body string, _ int) {
 				assert.Equal(t, "", body)
 			},
 		},
@@ -1292,7 +1285,7 @@ func TestNoProxy(t *testing.T) {
 					URI:           "/public/allowed",
 					ExpectedProxy: false,
 					ExpectedCode:  http.StatusOK,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -1321,7 +1314,7 @@ func TestNoProxy(t *testing.T) {
 					URI:           "/private",
 					ExpectedProxy: false,
 					ExpectedCode:  http.StatusUnauthorized,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -1351,7 +1344,7 @@ func TestNoProxy(t *testing.T) {
 					ExpectedProxy: false,
 					Redirects:     true,
 					ExpectedCode:  http.StatusSeeOther,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 					ExpectedLocation: "https://thiswillbereplaced/oauth",
@@ -1386,7 +1379,7 @@ func TestNoProxy(t *testing.T) {
 					ExpectedProxy: false,
 					Redirects:     true,
 					ExpectedCode:  http.StatusForbidden,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -1426,7 +1419,7 @@ func TestNoProxy(t *testing.T) {
 					LoginXforwarded: true,
 					Redirects:       true,
 					ExpectedCode:    http.StatusOK,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 					Headers: map[string]string{
@@ -1441,7 +1434,7 @@ func TestNoProxy(t *testing.T) {
 					LoginXforwarded: true,
 					Redirects:       true,
 					ExpectedCode:    http.StatusForbidden,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 					Headers: map[string]string{
@@ -1454,7 +1447,6 @@ func TestNoProxy(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1524,7 +1516,7 @@ func TestXForwarded(t *testing.T) {
 	}{
 		{
 			Name: "TestEmptyXForwarded",
-			ProxySettings: func(c *config.Config) {
+			ProxySettings: func(_ *config.Config) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -1541,7 +1533,7 @@ func TestXForwarded(t *testing.T) {
 		},
 		{
 			Name: "TestXForwardedPresent",
-			ProxySettings: func(c *config.Config) {
+			ProxySettings: func(_ *config.Config) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -1561,7 +1553,7 @@ func TestXForwarded(t *testing.T) {
 		},
 		{
 			Name: "TestXRealIP",
-			ProxySettings: func(c *config.Config) {
+			ProxySettings: func(_ *config.Config) {
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -1582,7 +1574,6 @@ func TestXForwarded(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {
@@ -1643,7 +1634,6 @@ func TestTokenEncryption(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfg := *cfg
 		t.Run(
 			testCase.Name,
@@ -1933,7 +1923,6 @@ func TestTLS(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		cfg := newFakeKeycloakConfig()
 		t.Run(
 			testCase.Name,
@@ -2058,7 +2047,7 @@ func TestCustomHTTPMethod(t *testing.T) {
 					ExpectedProxy: false,
 					Redirects:     false,
 					ExpectedCode:  http.StatusUnauthorized,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -2132,7 +2121,7 @@ func TestCustomHTTPMethod(t *testing.T) {
 					ExpectedProxy: false,
 					Redirects:     false,
 					ExpectedCode:  http.StatusUnauthorized,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -2156,7 +2145,7 @@ func TestCustomHTTPMethod(t *testing.T) {
 					URI:           "/webdav/test",
 					ExpectedProxy: false,
 					ExpectedCode:  http.StatusNotImplemented,
-					ExpectedContent: func(body string, testNum int) {
+					ExpectedContent: func(body string, _ int) {
 						assert.Equal(t, "", body)
 					},
 				},
@@ -2165,7 +2154,6 @@ func TestCustomHTTPMethod(t *testing.T) {
 	}
 
 	for _, testCase := range testCases {
-		testCase := testCase
 		t.Run(
 			testCase.Name,
 			func(t *testing.T) {

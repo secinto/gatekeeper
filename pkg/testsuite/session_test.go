@@ -16,7 +16,6 @@ limitations under the License.
 package testsuite
 
 import (
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -41,7 +40,7 @@ func TestGetIndentity(t *testing.T) {
 			Request: func(token string) *http.Request {
 				return &http.Request{
 					Header: http.Header{
-						"Authorization": []string{fmt.Sprintf("Bearer %s", token)},
+						"Authorization": []string{"Bearer " + token},
 					},
 				}
 			},
@@ -51,7 +50,7 @@ func TestGetIndentity(t *testing.T) {
 			},
 		},
 		{
-			Request: func(token string) *http.Request {
+			Request: func(_ string) *http.Request {
 				return &http.Request{
 					Header: http.Header{
 						"Authorization": []string{"Basic QWxhZGRpbjpPcGVuU2VzYW1l"},
@@ -67,7 +66,7 @@ func TestGetIndentity(t *testing.T) {
 			Request: func(token string) *http.Request {
 				return &http.Request{
 					Header: http.Header{
-						"Authorization": []string{fmt.Sprintf("Test %s", token)},
+						"Authorization": []string{"Test " + token},
 					},
 				}
 			},
@@ -77,7 +76,7 @@ func TestGetIndentity(t *testing.T) {
 			},
 		},
 		{
-			Request: func(token string) *http.Request {
+			Request: func(_ string) *http.Request {
 				return &http.Request{
 					Header: http.Header{},
 				}
@@ -88,7 +87,7 @@ func TestGetIndentity(t *testing.T) {
 			},
 		},
 		{
-			Request: func(token string) *http.Request {
+			Request: func(_ string) *http.Request {
 				return &http.Request{
 					Header: http.Header{},
 				}
@@ -102,7 +101,7 @@ func TestGetIndentity(t *testing.T) {
 			Request: func(token string) *http.Request {
 				return &http.Request{
 					Header: http.Header{
-						"Authorization": []string{fmt.Sprintf("Bearer %s", token)},
+						"Authorization": []string{"Bearer " + token},
 					},
 				}
 			},
@@ -112,7 +111,7 @@ func TestGetIndentity(t *testing.T) {
 			},
 		},
 		{
-			Request: func(token string) *http.Request {
+			Request: func(_ string) *http.Request {
 				return &http.Request{
 					Header: http.Header{
 						"Authorization": []string{"Basic QWxhZGRpbjpPcGVuU2VzYW1l"},
@@ -128,7 +127,6 @@ func TestGetIndentity(t *testing.T) {
 
 	for idx, testCase := range testCases {
 		cfg := newFakeKeycloakConfig()
-		testCase := testCase
 		testCase.ProxySettings(cfg)
 
 		p, idp, _ := newTestProxyService(cfg)
