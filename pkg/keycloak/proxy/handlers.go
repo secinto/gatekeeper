@@ -91,7 +91,7 @@ func oauthAuthorizationHandler(
 		}
 
 		if enablePKCE {
-			codeVerifier, err := pkce.NewCodeVerifierWithLength(96)
+			codeVerifier, err := pkce.NewCodeVerifierWithLength(constant.PKCECodeVerifierLength)
 			if err != nil {
 				logger.Error(
 					apperrors.ErrPKCECodeCreation.Error(),
@@ -759,14 +759,11 @@ func logoutHandler(
 		}
 
 		// set the default revocation url
-		revokeDefault := fmt.Sprintf(
-			"%s/protocol/openid-connect/revoke",
-			strings.TrimSuffix(
-				discoveryURL,
-				"/.well-known/openid-configuration",
-			),
+		endpoint := strings.TrimSuffix(
+			discoveryURL,
+			"/.well-known/openid-configuration",
 		)
-
+		revokeDefault := endpoint + constant.IdpRevokeURI
 		revocationURL := utils.DefaultTo(revocationEndpoint, revokeDefault)
 
 		// step: do we have a revocation endpoint?
@@ -779,9 +776,7 @@ func logoutHandler(
 			request, err := http.NewRequest(
 				http.MethodPost,
 				revocationURL,
-				bytes.NewBufferString(
-					fmt.Sprintf("token=%s", identityToken),
-				),
+				bytes.NewBufferString("token="+identityToken),
 			)
 			if err != nil {
 				scope.Logger.Error(apperrors.ErrCreateRevocationReq.Error(), zap.Error(err))

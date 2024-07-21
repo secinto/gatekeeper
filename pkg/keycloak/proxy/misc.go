@@ -99,7 +99,7 @@ func getPAT(
 				"Chosen grant type is not supported",
 				zap.String("grant_type", grantType),
 			)
-			os.Exit(11)
+			os.Exit(1)
 		}
 
 		if err != nil {
@@ -108,7 +108,7 @@ func getPAT(
 
 			if retry >= patRetryCount {
 				cancel()
-				os.Exit(10)
+				os.Exit(1)
 			}
 
 			<-time.After(patRetryInterval)
@@ -144,7 +144,7 @@ func getPAT(
 
 		retry = 0
 		expiration := stdClaims.Expiry.Time()
-		refreshIn := utils.GetWithin(expiration, 0.85)
+		refreshIn := utils.GetWithin(expiration, constant.PATRefreshInPercent)
 
 		logger.Info(
 			"waiting for expiration of access token",

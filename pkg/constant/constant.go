@@ -74,7 +74,10 @@ const (
 	IdpResourceSetURI = "/authz/protection/resource_set"
 	IdpProtectPermURI = "/authz/protection/permission"
 
-	InvalidCookieDuration = -10 * time.Hour
+	InvalidCookieDuration  = -10 * time.Hour
+	PKCECodeVerifierLength = 96
+	PATRefreshInPercent    = 0.85
+	HTTPCompressionLevel   = 5
 )
 
 var SignatureAlgs = [3]jose.SignatureAlgorithm{jose.RS256, jose.HS256, jose.HS512}

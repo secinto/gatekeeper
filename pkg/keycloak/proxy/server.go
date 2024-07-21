@@ -241,7 +241,7 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 	}
 
 	if r.Config.EnableCompression {
-		engine.Use(middleware.Compress(5))
+		engine.Use(middleware.Compress(constant.HTTPCompressionLevel))
 	}
 
 	// @step: enable the entrypoint middleware
@@ -816,7 +816,7 @@ func (r *OauthProxy) createForwardingProxy() error {
 
 		// implement the goproxy connect method
 		proxy.OnRequest().HandleConnectFunc(
-			func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+			func(host string, _ *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
 				return &goproxy.ConnectAction{
 					Action:    goproxy.ConnectMitm,
 					TLSConfig: goproxy.TLSConfigFromCA(cAuthority),
@@ -1103,7 +1103,7 @@ func (r *OauthProxy) createHTTPListener(config listenerConfig) (net.Listener, er
 
 	// @check if the socket requires TLS
 	if config.useSelfSignedTLS || config.useLetsEncryptTLS || config.useFileTLS {
-		getCertificate := func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		getCertificate := func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
 			return nil, errors.New("not configured")
 		}
 
@@ -1228,7 +1228,7 @@ func (r *OauthProxy) createUpstreamProxy(upstream *url.URL) error {
 		)
 
 		socketPath := fmt.Sprintf("%s%s", upstream.Host, upstream.Path)
-		dialer = func(network, address string) (net.Conn, error) {
+		dialer = func(_, _ string) (net.Conn, error) {
 			return net.Dial("unix", socketPath)
 		}
 
