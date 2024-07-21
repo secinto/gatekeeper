@@ -1354,6 +1354,7 @@ func TestNoProxy(t *testing.T) {
 					ExpectedContent: func(body string, testNum int) {
 						assert.Equal(t, "", body)
 					},
+					ExpectedLocation: "https://thiswillbereplaced/oauth",
 					Headers: map[string]string{
 						"X-Forwarded-Host":  "thiswillbereplaced",
 						"X-Forwarded-Proto": "https",
@@ -1394,10 +1395,15 @@ func TestNoProxy(t *testing.T) {
 		{
 			Name: "TestNoProxyWithRedirectsPrivateAuthenticated",
 			ProxySettings: func(c *config.Config) {
-				c.EnableDefaultDeny = true
+				c.EnableDefaultDeny = false
 				c.NoRedirects = false
 				c.NoProxy = true
 				c.Resources = []*authorization.Resource{
+					{
+						URL:     "/*",
+						Methods: utils.AllHTTPMethods,
+						Roles:   []string{"user"},
+					},
 					{
 						URL:         "/public/*",
 						Methods:     utils.AllHTTPMethods,
@@ -1405,13 +1411,16 @@ func TestNoProxy(t *testing.T) {
 					},
 					{
 						URL:     "/private",
-						Methods: []string{"GET"},
+						Methods: []string{"POST"},
 					},
 				}
 			},
 			ExecutionSettings: []fakeRequest{
 				{
-					URI:             "/private",
+					// forward-auth will send / as path always so we are simulating it
+					// real path will be sent in X-Forwarded-Uri, which should be
+					// injected to request path in forward-auth middleware
+					URI:             "/",
 					ExpectedProxy:   false,
 					HasLogin:        true,
 					LoginXforwarded: true,
@@ -1419,6 +1428,25 @@ func TestNoProxy(t *testing.T) {
 					ExpectedCode:    http.StatusOK,
 					ExpectedContent: func(body string, testNum int) {
 						assert.Equal(t, "", body)
+					},
+					Headers: map[string]string{
+						"X-Forwarded-Uri":    "/private",
+						"X-Forwarded-Method": "POST",
+					},
+				},
+				{
+					URI:             "/",
+					ExpectedProxy:   false,
+					HasLogin:        true,
+					LoginXforwarded: true,
+					Redirects:       true,
+					ExpectedCode:    http.StatusForbidden,
+					ExpectedContent: func(body string, testNum int) {
+						assert.Equal(t, "", body)
+					},
+					Headers: map[string]string{
+						"X-Forwarded-Uri":    "/private",
+						"X-Forwarded-Method": "DELETE",
 					},
 				},
 			},

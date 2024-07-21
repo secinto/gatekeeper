@@ -372,3 +372,23 @@ func ProxyMiddleware(
 		})
 	}
 }
+
+// ForwardAuthMiddleware
+func ForwardAuthMiddleware(logger *zap.Logger, oAuthURI string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		logger.Info("enabling the forward-auth middleware")
+
+		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			if !strings.Contains(req.URL.Path, oAuthURI) { // this condition is here only because of tests to work
+				if forwardedPath := req.Header.Get("X-Forwarded-Uri"); forwardedPath != "" {
+					req.URL.Path = forwardedPath
+					req.URL.RawPath = forwardedPath
+				}
+				if forwardedMethod := req.Header.Get("X-Forwarded-Method"); forwardedMethod != "" {
+					req.Method = forwardedMethod
+				}
+			}
+			next.ServeHTTP(wrt, req)
+		})
+	}
+}
