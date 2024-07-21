@@ -232,7 +232,7 @@ func IdentityHeadersMiddleware(
 		if len(xslices) > minSliceLength {
 			customClaims[val] = utils.ToHeader(xslices[1])
 		} else {
-			customClaims[val] = fmt.Sprintf("X-Auth-%s", utils.ToHeader(val))
+			customClaims[val] = "X-Auth-" + utils.ToHeader(val)
 		}
 	}
 
@@ -255,7 +255,7 @@ func IdentityHeadersMiddleware(
 				user := scope.Identity
 				headers.Set("X-Auth-Audience", strings.Join(user.Audiences, ","))
 				headers.Set("X-Auth-Email", user.Email)
-				headers.Set("X-Auth-ExpiresIn", user.ExpiresAt.String())
+				headers.Set("X-Auth-Expiresin", user.ExpiresAt.String())
 				headers.Set("X-Auth-Groups", strings.Join(user.Groups, ","))
 				headers.Set("X-Auth-Roles", strings.Join(user.Roles, ","))
 				headers.Set("X-Auth-Subject", user.ID)
@@ -268,7 +268,7 @@ func IdentityHeadersMiddleware(
 				}
 				// add the authorization header if requested
 				if enableAuthzHeader {
-					headers.Set("Authorization", fmt.Sprintf("Bearer %s", user.RawToken))
+					headers.Set("Authorization", "Bearer "+user.RawToken)
 				}
 				// are we filtering out the cookies
 				if !enableAuthzCookies {

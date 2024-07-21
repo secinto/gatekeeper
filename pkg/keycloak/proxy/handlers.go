@@ -408,13 +408,13 @@ func loginHandler(
 			return
 		}
 
-		code, err := func() (int, error) {
-			ctx, cancel := context.WithTimeout(
-				req.Context(),
-				openIDProviderTimeout,
-			)
-			defer cancel()
+		ctx, cancel := context.WithTimeout(
+			req.Context(),
+			openIDProviderTimeout,
+		)
+		defer cancel()
 
+		code, err := func(context.Context) (int, error) {
 			ctx = context.WithValue(
 				ctx,
 				oauth2.HTTPClient,
@@ -541,7 +541,9 @@ func loginHandler(
 
 				switch store != nil {
 				case true:
-					if err = store.Set(req.Context(), utils.GetHashKey(token.AccessToken), refreshToken, expiration); err != nil {
+					rCtx, rCancel := context.WithTimeout(ctx, constant.RedisTimeout)
+					defer rCancel()
+					if err = store.Set(rCtx, utils.GetHashKey(token.AccessToken), refreshToken, expiration); err != nil {
 						scope.Logger.Error(
 							apperrors.ErrSaveTokToStore.Error(),
 							zap.Error(err),
@@ -608,7 +610,7 @@ func loginHandler(
 			}
 
 			return http.StatusOK, nil
-		}()
+		}(ctx)
 
 		if err != nil {
 			scope.Logger.Error(err.Error(),
@@ -717,14 +719,16 @@ func logoutHandler(
 
 		// step: check if the user has a state session and if so revoke it
 		if store != nil {
-			go func() {
-				if err := store.Delete(req.Context(), utils.GetHashKey(user.RawToken)); err != nil {
+			go func(ctx context.Context) {
+				rCtx, rCancel := context.WithTimeout(ctx, constant.RedisTimeout)
+				defer rCancel()
+				if err := store.Delete(rCtx, utils.GetHashKey(user.RawToken)); err != nil {
 					scope.Logger.Error(
 						apperrors.ErrDelTokFromStore.Error(),
 						zap.Error(err),
 					)
 				}
-			}()
+			}(req.Context())
 		}
 
 		// @check if we should redirect to the provider

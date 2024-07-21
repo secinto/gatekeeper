@@ -62,7 +62,7 @@ func GetTokenInRequest(
 	}
 
 	// step: check for a token in the authorization header
-	if err != nil || (err == nil && skipAuthorizationHeaderIdentity) {
+	if err != nil || skipAuthorizationHeaderIdentity {
 		if token, err = GetTokenInCookie(req, name); err != nil {
 			return token, false, err
 		}
@@ -80,7 +80,8 @@ func GetTokenInBearer(req *http.Request) (string, error) {
 	}
 
 	items := strings.Split(token, " ")
-	if len(items) != 2 {
+	numItems := 2
+	if len(items) != numItems {
 		return "", apperrors.ErrInvalidSession
 	}
 
@@ -318,7 +319,7 @@ func GetCodeFlowTokens(
 
 	if code == "" {
 		accessError(writer, req)
-		return "", "", "", fmt.Errorf("missing auth code")
+		return "", "", "", apperrors.ErrMissingAuthCode
 	}
 
 	conf := newOAuth2Config(getRedirectionURL(writer, req))

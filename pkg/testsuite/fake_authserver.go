@@ -68,7 +68,7 @@ var defTestTokenClaims = DefaultTestTokenClaims{
 	FamilyName:        "Jayawardene",
 	GivenName:         "Rohith",
 	Username:          "Jayawardene",
-	Iat:               1450372669,
+	Iat:               DefaultIat,
 	Iss:               "test",
 	Jti:               "4ee75b8e-3ee6-4382-92d4-3390b4b4937b",
 	Name:              "Rohith Jayawardene",
@@ -449,7 +449,7 @@ func (r *fakeAuthServer) authHandler(wrt http.ResponseWriter, req *http.Request)
 		state = "/"
 	}
 
-	randString, err := getRandomString(32)
+	randString, err := getRandomString(OAuthCodeLength)
 
 	if err != nil {
 		wrt.WriteHeader(http.StatusInternalServerError)
@@ -479,7 +479,8 @@ func (r *fakeAuthServer) revocationHandler(wrt http.ResponseWriter, req *http.Re
 
 func (r *fakeAuthServer) userInfoHandler(wrt http.ResponseWriter, req *http.Request) {
 	items := strings.Split(req.Header.Get("Authorization"), " ")
-	if len(items) != 2 {
+	authItems := 2
+	if len(items) != authItems {
 		wrt.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -517,7 +518,8 @@ func (r *fakeAuthServer) userInfoHandler(wrt http.ResponseWriter, req *http.Requ
 //nolint:cyclop
 func (r *fakeAuthServer) tokenHandler(writer http.ResponseWriter, req *http.Request) {
 	expires := time.Now().Add(r.expiration)
-	refreshExpires := time.Now().Add(2 * r.expiration)
+	refreshExpirationFactor := 2
+	refreshExpires := time.Now().Add(time.Duration(refreshExpirationFactor) * r.expiration)
 	token := NewTestToken(r.getLocation())
 	token.SetExpiration(expires)
 	refreshToken := NewTestToken(r.getLocation())

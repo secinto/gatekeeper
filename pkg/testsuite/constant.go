@@ -29,6 +29,8 @@ const (
 	TestProxyHeaderKey           = "X-GoProxy"
 	TestProxyHeaderVal           = "yxorPoG-X"
 	DefaultOpenIDProviderTimeout = time.Second * 5
+	DefaultIat                   = 1450372669
+	OAuthCodeLength              = 32
 )
 
 var ErrCreateFakeProxy = errors.New("failed to create fake proxy service")
