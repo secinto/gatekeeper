@@ -293,12 +293,12 @@ type fakeOidcDiscoveryResponse struct {
 var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 type fakeAuthConfig struct {
+	DiscoveryURLPrefix        string
+	Expiration                time.Duration
 	EnablePKCE                bool
 	EnableTLS                 bool
 	EnableProxy               bool
-	Expiration                time.Duration
 	ResourceSetHandlerFailure bool
-	DiscoveryURLPrefix        string
 }
 
 // newFakeAuthServer simulates a oauth service

@@ -29,9 +29,6 @@ import (
 type Manager struct {
 	CookieDomain         string
 	BaseURI              string
-	HTTPOnlyCookie       bool
-	SecureCookie         bool
-	EnableSessionCookies bool
 	SameSiteCookie       string
 	CookieAccessName     string
 	CookieRefreshName    string
@@ -40,6 +37,9 @@ type Manager struct {
 	CookieUMAName        string
 	CookieRequestURIName string
 	CookieOAuthStateName string
+	HTTPOnlyCookie       bool
+	SecureCookie         bool
+	EnableSessionCookies bool
 	NoProxy              bool
 	NoRedirects          bool
 }

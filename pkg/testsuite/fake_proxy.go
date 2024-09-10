@@ -30,49 +30,49 @@ import (
 )
 
 type fakeRequest struct {
-	BasicAuth                     bool
 	Cookies                       []*http.Cookie
-	Expires                       time.Duration
-	FormValues                    map[string]string
 	Groups                        []string
-	HasCookieToken                bool
-	HasLogin                      bool
-	LoginXforwarded               bool
-	HasToken                      bool
-	Headers                       map[string]string
+	Roles                         []string
+	ExpectedNoProxyHeaders        []string
 	Method                        string
-	NotSigned                     bool
-	OnResponse                    func(int, *resty.Request, *resty.Response)
 	Password                      string
 	ProxyProtocol                 string
-	ProxyRequest                  bool
 	RawToken                      string
-	Redirects                     bool
-	Roles                         []string
-	SkipClientIDCheck             bool
-	SkipIssuerCheck               bool
 	RequestCA                     string
-	TokenClaims                   map[string]interface{}
-	TokenAuthorization            *models.Permissions
 	URI                           string
 	URL                           string
 	Username                      string
-	TLSMin                        uint16
-	TLSMax                        uint16
-	ExpectedCode                  int
-	ExpectedContent               func(body string, testNum int)
 	ExpectedContentContains       string
 	ExpectedRequestError          string
+	ExpectedLocation              string
+	Expires                       time.Duration
+	FormValues                    map[string]string
+	Headers                       map[string]string
+	OnResponse                    func(int, *resty.Request, *resty.Response)
+	TokenClaims                   map[string]interface{}
+	TokenAuthorization            *models.Permissions
+	ExpectedCode                  int
+	ExpectedContent               func(body string, testNum int)
 	ExpectedCookies               map[string]string
 	ExpectedHeaders               map[string]string
 	ExpectedHeadersValidator      map[string]func(*testing.T, *config.Config, string)
-	ExpectedLocation              string
-	ExpectedNoProxyHeaders        []string
-	ExpectedProxy                 bool
 	ExpectedProxyHeaders          map[string]string
 	ExpectedProxyHeadersValidator map[string]func(*testing.T, *config.Config, string)
 	ExpectedCookiesValidator      map[string]func(*testing.T, *config.Config, string) bool
 	ExpectedLoginCookiesValidator map[string]func(*testing.T, *config.Config, string) bool
+	TLSMin                        uint16
+	TLSMax                        uint16
+	BasicAuth                     bool
+	HasCookieToken                bool
+	HasLogin                      bool
+	LoginXforwarded               bool
+	HasToken                      bool
+	NotSigned                     bool
+	ProxyRequest                  bool
+	Redirects                     bool
+	SkipClientIDCheck             bool
+	SkipIssuerCheck               bool
+	ExpectedProxy                 bool
 }
 
 type fakeProxy struct {

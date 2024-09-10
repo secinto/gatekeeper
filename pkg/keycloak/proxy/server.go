@@ -1020,19 +1020,19 @@ func (r *OauthProxy) Shutdown() error {
 
 // listenerConfig encapsulate listener options
 type listenerConfig struct {
+	hostnames           []string // list of hostnames the service will respond to
 	ca                  string   // the path to a certificate authority
 	certificate         string   // the path to the certificate if any
 	clientCert          string   // the path to a client certificate to use for mutual tls
-	hostnames           []string // list of hostnames the service will respond to
 	letsEncryptCacheDir string   // the path to cache letsencrypt certificates
 	listen              string   // the interface to bind the listener to
 	privateKey          string   // the path to the private key if any
-	proxyProtocol       bool     // whether to enable proxy protocol on the listen
 	redirectionURL      string   // url to redirect to
+	minTLSVersion       uint16   // server minimal TLS version
+	proxyProtocol       bool     // whether to enable proxy protocol on the listen
 	useFileTLS          bool     // indicates we are using certificates from files
 	useLetsEncryptTLS   bool     // indicates we are using letsencrypt
 	useSelfSignedTLS    bool     // indicates we are using the self-signed tls
-	minTLSVersion       uint16   // server minimal TLS version
 }
 
 // makeListenerConfig extracts a listener configuration from a proxy Config
