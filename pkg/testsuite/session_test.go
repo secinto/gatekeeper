@@ -133,7 +133,15 @@ func TestGetIndentity(t *testing.T) {
 		token, err := NewTestToken(idp.getLocation()).GetToken()
 		require.NoError(t, err)
 
-		user, err := p.GetIdentity(testCase.Request(token), cfg.CookieAccessName, "")
+		getIdentity := session.GetIdentity(
+			p.Log,
+			cfg.SkipAuthorizationHeaderIdentity,
+			cfg.EnableEncryptedToken,
+			cfg.ForceEncryptedCookie,
+			cfg.EncryptionKey,
+		)
+
+		user, err := getIdentity(testCase.Request(token), cfg.CookieAccessName, "")
 
 		if err != nil && testCase.Ok {
 			t.Errorf("test case %d should not have errored", idx)

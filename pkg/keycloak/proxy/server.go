@@ -223,7 +223,7 @@ func createLogger(config *config.Config) (*zap.Logger, error) {
 }
 
 // useDefaultStack sets the default middleware stack for router
-func (r *OauthProxy) useDefaultStack(engine chi.Router) {
+func (r *OauthProxy) useDefaultStack(engine chi.Router, accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context) {
 	engine.NotFound(handlers.EmptyHandler)
 
 	if r.Config.EnableDefaultDeny || r.Config.EnableDefaultDenyStrict {
@@ -255,37 +255,6 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 		engine.Use(gmiddleware.LoggingMiddleware(r.Log, r.Config.Verbose))
 	}
 
-	// step: load the templates if any
-	tmpl := createTemplates(
-		r.Log,
-		r.Config.SignInPage,
-		r.Config.ForbiddenPage,
-		r.Config.ErrorPage,
-	)
-
-	r.accessForbidden = core.AccessForbidden(
-		r.Log,
-		http.StatusForbidden,
-		r.Config.ForbiddenPage,
-		r.Config.Tags,
-		tmpl,
-	)
-
-	r.accessError = core.AccessForbidden(
-		r.Log,
-		http.StatusBadRequest,
-		r.Config.ErrorPage,
-		r.Config.Tags,
-		tmpl,
-	)
-
-	r.customSignInPage = core.CustomSignInPage(
-		r.Log,
-		r.Config.SignInPage,
-		r.Config.Tags,
-		tmpl,
-	)
-
 	if r.Config.EnableSecurityFilter {
 		engine.Use(
 			gmiddleware.SecurityMiddleware(
@@ -296,7 +265,7 @@ func (r *OauthProxy) useDefaultStack(engine chi.Router) {
 				r.Config.EnableContentNoSniff,
 				r.Config.EnableFrameDeny,
 				r.Config.EnableHTTPSRedirect,
-				r.accessForbidden,
+				accessForbidden,
 			),
 		)
 	}
@@ -317,8 +286,39 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		}
 	}
 
+	// step: load the templates if any
+	tmpl := createTemplates(
+		r.Log,
+		r.Config.SignInPage,
+		r.Config.ForbiddenPage,
+		r.Config.ErrorPage,
+	)
+
+	accessForbidden := core.AccessForbidden(
+		r.Log,
+		http.StatusForbidden,
+		r.Config.ForbiddenPage,
+		r.Config.Tags,
+		tmpl,
+	)
+
+	customSignInPage := core.CustomSignInPage(
+		r.Log,
+		r.Config.SignInPage,
+		r.Config.Tags,
+		tmpl,
+	)
+
+	accessError := core.AccessForbidden(
+		r.Log,
+		http.StatusBadRequest,
+		r.Config.ErrorPage,
+		r.Config.Tags,
+		tmpl,
+	)
+
 	engine := chi.NewRouter()
-	r.useDefaultStack(engine)
+	r.useDefaultStack(engine, accessForbidden)
 
 	WithOAuthURI := utils.WithOAuthURI(r.Config.BaseURI, r.Config.OAuthURI)
 	r.Cm = &cookie.Manager{
@@ -339,7 +339,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		NoRedirects:          r.Config.NoRedirects,
 	}
 
-	r.newOAuth2Config = utils.NewOAuth2Config(
+	newOAuth2Config := utils.NewOAuth2Config(
 		r.Config.ClientID,
 		r.Config.ClientSecret,
 		r.Provider.Endpoint().AuthURL,
@@ -347,7 +347,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.Scopes,
 	)
 
-	r.GetIdentity = session.GetIdentity(
+	getIdentity := session.GetIdentity(
 		r.Log,
 		r.Config.SkipAuthorizationHeaderIdentity,
 		r.Config.EnableEncryptedToken,
@@ -355,7 +355,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.EncryptionKey,
 	)
 
-	r.getRedirectionURL = handlers.GetRedirectionURL(
+	getRedirectionURL := handlers.GetRedirectionURL(
 		r.Log,
 		r.Config.RedirectionURL,
 		r.Config.NoProxy,
@@ -433,7 +433,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			constant.MetricsURL,
 			handlers.ProxyMetricsHandler(
 				r.Config.LocalhostMetrics,
-				r.accessForbidden,
+				accessForbidden,
 				r.metricsHandler,
 			),
 		)
@@ -443,7 +443,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Log,
 		r.Config.CookieAccessName,
 		r.Config.CookieRefreshName,
-		r.GetIdentity,
+		getIdentity,
 		r.IdpClient.RestyClient().GetClient(),
 		r.Config.EnableIDPSessionCheck,
 		r.Provider,
@@ -451,7 +451,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.ClientID,
 		r.Config.SkipAccessTokenClientIDCheck,
 		r.Config.SkipAccessTokenIssuerCheck,
-		r.accessForbidden,
+		accessForbidden,
 		r.Config.EnableRefreshTokens,
 		r.Config.RedirectionURL,
 		r.Cm,
@@ -459,7 +459,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.ForceEncryptedCookie,
 		r.Config.EncryptionKey,
 		redToAuth,
-		r.newOAuth2Config,
+		newOAuth2Config,
 		r.Store,
 		r.Config.AccessTokenDuration,
 	)
@@ -469,8 +469,8 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.OpenIDProviderTimeout,
 		r.IdpClient.RestyClient().GetClient(),
 		r.Config.EnableLoginHandler,
-		r.newOAuth2Config,
-		r.getRedirectionURL,
+		newOAuth2Config,
+		getRedirectionURL,
 		r.Config.EnableEncryptedToken,
 		r.Config.ForceEncryptedCookie,
 		r.Config.EncryptionKey,
@@ -499,8 +499,8 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Store,
 		r.Cm,
 		r.IdpClient.RestyClient().GetClient(),
-		r.accessError,
-		r.GetIdentity,
+		accessError,
+		getIdentity,
 	)
 
 	oauthCallbackHand := oauthCallbackHandler(
@@ -526,10 +526,10 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.pat,
 		r.IdpClient,
 		r.Store,
-		r.newOAuth2Config,
-		r.getRedirectionURL,
-		r.accessForbidden,
-		r.accessError,
+		newOAuth2Config,
+		getRedirectionURL,
+		accessForbidden,
+		accessError,
 	)
 
 	oauthAuthorizationHand := oauthAuthorizationHandler(
@@ -539,9 +539,9 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.EnablePKCE,
 		r.Config.SignInPage,
 		r.Cm,
-		r.newOAuth2Config,
-		r.getRedirectionURL,
-		r.customSignInPage,
+		newOAuth2Config,
+		getRedirectionURL,
+		customSignInPage,
 		r.Config.AllowedQueryParams,
 		r.Config.DefaultAllowedQueryParams,
 	)
@@ -551,11 +551,11 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		eng.MethodNotAllowed(handlers.MethodNotAllowHandlder)
 		eng.HandleFunc(constant.AuthorizationURL, oauthAuthorizationHand)
 		eng.Get(constant.CallbackURL, oauthCallbackHand)
-		eng.Get(constant.ExpiredURL, handlers.ExpirationHandler(r.GetIdentity, r.Config.CookieAccessName))
+		eng.Get(constant.ExpiredURL, handlers.ExpirationHandler(getIdentity, r.Config.CookieAccessName))
 		eng.With(authMid).Get(constant.LogoutURL, logoutHand)
 		eng.With(authMid).Get(
 			constant.TokenURL,
-			handlers.TokenHandler(r.GetIdentity, r.Config.CookieAccessName, r.accessError),
+			handlers.TokenHandler(getIdentity, r.Config.CookieAccessName, accessError),
 		)
 		eng.Post(constant.LoginURL, loginHand)
 		eng.Get(constant.DiscoveryURL, handlers.DiscoveryHandler(r.Log, WithOAuthURI))
@@ -666,7 +666,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 				r.Log,
 				res,
 				r.Config.MatchClaims,
-				r.accessForbidden,
+				accessForbidden,
 			),
 			gmiddleware.IdentityHeadersMiddleware(
 				r.Log,
@@ -682,7 +682,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 
 		if res.URL == constant.AllPath && !res.WhiteListed && enableDefaultDenyStrict {
 			middlewares = []func(http.Handler) http.Handler{
-				gmiddleware.DenyMiddleware(r.Log, r.accessForbidden),
+				gmiddleware.DenyMiddleware(r.Log, accessForbidden),
 				gmiddleware.ProxyDenyMiddleware(r.Log),
 			}
 		}
@@ -712,14 +712,14 @@ func (r *OauthProxy) CreateReverseProxy() error {
 					r.Config.ClientID,
 					r.Config.SkipAccessTokenClientIDCheck,
 					r.Config.SkipAccessTokenIssuerCheck,
-					r.GetIdentity,
-					r.accessForbidden,
+					getIdentity,
+					accessForbidden,
 				),
 				gmiddleware.AdmissionMiddleware(
 					r.Log,
 					res,
 					r.Config.MatchClaims,
-					r.accessForbidden,
+					accessForbidden,
 				),
 				gmiddleware.IdentityHeadersMiddleware(
 					r.Log,
