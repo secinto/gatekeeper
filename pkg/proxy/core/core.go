@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -32,7 +33,7 @@ func GetVersion() string {
 
 type OauthProxies interface {
 	CreateReverseProxy() error
-	Run() error
+	Run() (context.Context, error)
 	Shutdown() error
 }
 

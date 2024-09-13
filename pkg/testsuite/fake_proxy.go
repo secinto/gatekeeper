@@ -118,7 +118,7 @@ func newFakeProxy(cfg *config.Config, authConfig *fakeAuthConfig) *fakeProxy {
 	}
 
 	// proxy.log = zap.NewNop()
-	if err = oProxy.Run(); err != nil {
+	if _, err = oProxy.Run(); err != nil {
 		panic("failed to create the proxy service, error: " + err.Error())
 	}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/storage"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 type PAT struct {
@@ -36,9 +37,12 @@ type OauthProxy struct {
 	Router         http.Handler
 	adminRouter    http.Handler
 	Server         *http.Server
+	HTTPServer     *http.Server
+	AdminServer    *http.Server
 	Store          storage.Storage
 	Upstream       core.ReverseProxy
 	pat            *PAT
 	rpt            *RPT
 	Cm             *cookie.Manager
+	ErrGroup       *errgroup.Group
 }

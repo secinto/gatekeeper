@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"golang.org/x/net/http/httpproxy"
+	"golang.org/x/sync/errgroup"
 
 	"go.uber.org/zap/zapcore"
 
@@ -875,11 +876,10 @@ func (r *OauthProxy) createForwardingProxy() error {
 // Run starts the proxy service
 //
 //nolint:cyclop
-func (r *OauthProxy) Run() error {
+func (r *OauthProxy) Run() (context.Context, error) {
 	listener, err := r.createHTTPListener(makeListenerConfig(r.Config))
-
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// step: create the main http(s) server
@@ -894,18 +894,24 @@ func (r *OauthProxy) Run() error {
 	r.Server = server
 	r.Listener = listener
 
-	go func() {
-		r.Log.Info(
-			"Gatekeeper proxy service starting",
-			zap.String("interface", r.Config.Listen),
-		)
+	errGroup, ctx := errgroup.WithContext(context.Background())
+	r.ErrGroup = errGroup
+	r.ErrGroup.Go(
+		func() error {
+			r.Log.Info(
+				"Gatekeeper proxy service starting",
+				zap.String("interface", r.Config.Listen),
+			)
 
-		if err = server.Serve(listener); err != nil {
-			if err != http.ErrServerClosed {
-				r.Log.Fatal("failed to start the http service", zap.Error(err))
+			if err := server.Serve(listener); err != nil {
+				if !errors.Is(err, http.ErrServerClosed) {
+					r.Log.Fatal("failed to start the http service", zap.Error(err))
+					return err
+				}
 			}
-		}
-	}()
+			return nil
+		},
+	)
 
 	// step: are we running http service as well?
 	if r.Config.ListenHTTP != "" {
@@ -918,9 +924,8 @@ func (r *OauthProxy) Run() error {
 			listen:        r.Config.ListenHTTP,
 			proxyProtocol: r.Config.EnableProxyProtocol,
 		})
-
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		httpsvc := &http.Server{
@@ -931,18 +936,23 @@ func (r *OauthProxy) Run() error {
 			IdleTimeout:  r.Config.ServerIdleTimeout,
 		}
 
-		go func() {
+		r.HTTPServer = httpsvc
+		r.ErrGroup.Go(func() error {
 			if err := httpsvc.Serve(httpListener); err != nil {
-				r.Log.Fatal("failed to start the http redirect service", zap.Error(err))
+				if !errors.Is(err, http.ErrServerClosed) {
+					r.Log.Error("failed to start the http redirect service", zap.Error(err))
+					return err
+				}
 			}
-		}()
+			return nil
+		})
 	}
 
 	// step: are we running specific admin service as well?
 	// if not, admin endpoints are added as routes in the main service
 	if r.Config.ListenAdmin != "" {
 		r.Log.Info(
-			"keycloak proxy admin service starting",
+			"Gatekeeper proxy admin service starting",
 			zap.String("interface", r.Config.ListenAdmin),
 		)
 
@@ -957,9 +967,8 @@ func (r *OauthProxy) Run() error {
 				listen:        r.Config.ListenAdmin,
 				proxyProtocol: r.Config.EnableProxyProtocol,
 			})
-
 			if err != nil {
-				return err
+				return nil, err
 			}
 		} else {
 			adminListenerConfig := makeListenerConfig(r.Config)
@@ -973,18 +982,16 @@ func (r *OauthProxy) Run() error {
 				adminListenerConfig.certificate = r.Config.TLSAdminCertificate
 				adminListenerConfig.privateKey = r.Config.TLSAdminPrivateKey
 			}
-
 			if r.Config.TLSAdminCaCertificate != "" {
 				adminListenerConfig.ca = r.Config.TLSAdminCaCertificate
 			}
-
 			if r.Config.TLSAdminClientCertificate != "" {
 				adminListenerConfig.clientCert = r.Config.TLSAdminClientCertificate
 			}
 
 			adminListener, err = r.createHTTPListener(adminListenerConfig)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 
@@ -996,26 +1003,52 @@ func (r *OauthProxy) Run() error {
 			IdleTimeout:  r.Config.ServerIdleTimeout,
 		}
 
-		go func() {
-			if ers := adminsvc.Serve(adminListener); err != nil {
-				r.Log.Fatal("failed to start the admin service", zap.Error(ers))
+		r.AdminServer = adminsvc
+		r.ErrGroup.Go(func() error {
+			if err := adminsvc.Serve(adminListener); err != nil {
+				if !errors.Is(err, http.ErrServerClosed) {
+					r.Log.Error("failed to start the admin service", zap.Error(err))
+					return err
+				}
 			}
-		}()
+			return nil
+		})
 	}
 
-	return nil
+	return ctx, nil
 }
 
 // Shutdown finishes the proxy service with gracefully period
 func (r *OauthProxy) Shutdown() error {
-	ctx, cancel := context.WithTimeout(context.Background(), r.Config.ServerGraceTimeout)
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		r.Config.ServerGraceTimeout,
+	)
 	defer cancel()
 
-	err := r.Server.Shutdown(ctx)
-	if err == nil {
-		return nil
+	var err error
+	servers := []*http.Server{
+		r.Server,
+		r.HTTPServer,
+		r.AdminServer,
 	}
-	return r.Server.Close()
+	for idx, srv := range servers {
+		if srv != nil {
+			r.Log.Debug("Shutdown http server", zap.Int("num", idx))
+			if errShut := srv.Shutdown(ctx); errShut != nil {
+				if closeErr := srv.Close(); closeErr != nil {
+					err = errors.Join(err, closeErr)
+				}
+			}
+		}
+	}
+
+	r.Log.Debug("Waiting for goroutines to finish")
+	if routineErr := r.ErrGroup.Wait(); routineErr != nil {
+		err = errors.Join(err, routineErr)
+	}
+
+	return err
 }
 
 // listenerConfig encapsulate listener options

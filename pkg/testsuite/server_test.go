@@ -58,7 +58,8 @@ func TestNewKeycloakProxy(t *testing.T) {
 	assert.NotNil(t, proxy.Config)
 	assert.NotNil(t, proxy.Router)
 	assert.NotNil(t, proxy.Endpoint)
-	require.NoError(t, proxy.Run())
+	_, err = proxy.Run()
+	require.NoError(t, err)
 }
 
 func TestNewKeycloakProxyWithLegacyDiscoveryURI(t *testing.T) {
@@ -78,7 +79,8 @@ func TestNewKeycloakProxyWithLegacyDiscoveryURI(t *testing.T) {
 	assert.NotNil(t, proxy.Config)
 	assert.NotNil(t, proxy.Router)
 	assert.NotNil(t, proxy.Endpoint)
-	require.NoError(t, proxy.Run())
+	_, err = proxy.Run()
+	require.NoError(t, err)
 }
 
 func TestReverseProxyHeaders(t *testing.T) {

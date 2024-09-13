@@ -2527,7 +2527,7 @@ func TestLogRealIP(t *testing.T) {
 		_ = cfg.Update()
 
 		proxy, _ := proxy.NewProxy(cfg, testLog, &FakeUpstreamService{})
-		_ = proxy.Run()
+		_, _ = proxy.Run()
 
 		cfg.RedirectionURL = "http://" + proxy.Listener.Addr().String()
 		fp := &fakeProxy{cfg, auth, proxy, make(map[string]*http.Cookie)}

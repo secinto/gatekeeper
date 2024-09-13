@@ -16,6 +16,8 @@ limitations under the License.
 package proxy
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -33,6 +35,8 @@ import (
 )
 
 // newOauthProxyApp creates a new cli application and runs it
+//
+//nolint:cyclop
 func NewOauthProxyApp[T proxycore.KeycloakProvider | proxycore.GoogleProvider](provider T) *cli.App {
 	cfg := config.ProduceConfig(provider)
 	app := cli.NewApp()
@@ -77,21 +81,34 @@ func NewOauthProxyApp[T proxycore.KeycloakProvider | proxycore.GoogleProvider](p
 		// step: create the proxy
 		proxy, err := ProduceProxy(cfg)
 		if err != nil {
+			if errShut := proxy.Shutdown(); errShut != nil {
+				err = errors.Join(err, errShut)
+			}
 			return utils.PrintError(err.Error())
 		}
 
 		// step: start the service
-		if err := proxy.Run(); err != nil {
+		var errGroupCtx context.Context
+		if errGroupCtx, err = proxy.Run(); err != nil {
+			if errShut := proxy.Shutdown(); errShut != nil {
+				err = errors.Join(err, errShut)
+			}
 			return utils.PrintError(err.Error())
 		}
 
 		// step: setup the termination signals
 		signalChannel := make(chan os.Signal, 1)
 		signal.Notify(signalChannel, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-		<-signalChannel
 
-		if err := proxy.Shutdown(); err != nil {
-			return utils.PrintError(err.Error())
+		select {
+		case <-errGroupCtx.Done():
+			if err := proxy.Shutdown(); err != nil {
+				return utils.PrintError(err.Error())
+			}
+		case <-signalChannel:
+			if err := proxy.Shutdown(); err != nil {
+				return utils.PrintError(err.Error())
+			}
 		}
 
 		return nil
