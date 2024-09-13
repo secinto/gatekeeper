@@ -108,6 +108,7 @@ func NewProxy(config *config.Config, log *zap.Logger, upstream core.ReverseProxy
 		Config:         config,
 		Log:            log,
 		metricsHandler: promhttp.Handler(),
+		pat:            &PAT{},
 	}
 
 	// parse the upstream endpoint
@@ -138,28 +139,6 @@ func NewProxy(config *config.Config, log *zap.Logger, upstream core.ReverseProxy
 	}
 
 	svc.Log.Info("successfully retrieved openid configuration from the discovery")
-
-	if config.EnableUma || config.EnableForwarding {
-		patDone := make(chan bool)
-		svc.pat = &PAT{}
-		go getPAT(
-			log,
-			svc.pat,
-			config.ClientID,
-			config.ClientSecret,
-			config.Realm,
-			config.OpenIDProviderTimeout,
-			config.PatRetryCount,
-			config.PatRetryInterval,
-			config.EnableForwarding,
-			config.ForwardingGrantType,
-			svc.IdpClient,
-			config.ForwardingUsername,
-			config.ForwardingPassword,
-			patDone,
-		)
-		<-patDone
-	}
 
 	if config.SkipTokenVerification {
 		log.Warn(
@@ -893,21 +872,43 @@ func (r *OauthProxy) Run() (context.Context, error) {
 
 	r.Server = server
 	r.Listener = listener
-
 	errGroup, ctx := errgroup.WithContext(context.Background())
 	r.ErrGroup = errGroup
+	patDone := make(chan bool)
+
+	if r.Config.EnableUma || r.Config.EnableForwarding {
+		r.ErrGroup.Go(func() error {
+			err := refreshPAT(
+				ctx,
+				r.Log,
+				r.pat,
+				r.Config.ClientID,
+				r.Config.ClientSecret,
+				r.Config.Realm,
+				r.Config.OpenIDProviderTimeout,
+				r.Config.PatRetryCount,
+				r.Config.PatRetryInterval,
+				r.Config.EnableForwarding,
+				r.Config.ForwardingGrantType,
+				r.IdpClient,
+				r.Config.ForwardingUsername,
+				r.Config.ForwardingPassword,
+				patDone,
+			)
+			return err
+		})
+		<-patDone
+	}
+
 	r.ErrGroup.Go(
 		func() error {
 			r.Log.Info(
-				"Gatekeeper proxy service starting",
+				"gatekeeper proxy service starting",
 				zap.String("interface", r.Config.Listen),
 			)
-
 			if err := server.Serve(listener); err != nil {
-				if !errors.Is(err, http.ErrServerClosed) {
-					r.Log.Fatal("failed to start the http service", zap.Error(err))
-					return err
-				}
+				err = errors.Join(apperrors.ErrStartMainHTTP, err)
+				return err
 			}
 			return nil
 		},
@@ -916,7 +917,7 @@ func (r *OauthProxy) Run() (context.Context, error) {
 	// step: are we running http service as well?
 	if r.Config.ListenHTTP != "" {
 		r.Log.Info(
-			"Gatekeeper proxy http service starting",
+			"gatekeeper proxy http service starting",
 			zap.String("interface", r.Config.ListenHTTP),
 		)
 
@@ -939,10 +940,8 @@ func (r *OauthProxy) Run() (context.Context, error) {
 		r.HTTPServer = httpsvc
 		r.ErrGroup.Go(func() error {
 			if err := httpsvc.Serve(httpListener); err != nil {
-				if !errors.Is(err, http.ErrServerClosed) {
-					r.Log.Error("failed to start the http redirect service", zap.Error(err))
-					return err
-				}
+				err = errors.Join(apperrors.ErrStartRedirectHTTP, err)
+				return err
 			}
 			return nil
 		})
@@ -952,7 +951,7 @@ func (r *OauthProxy) Run() (context.Context, error) {
 	// if not, admin endpoints are added as routes in the main service
 	if r.Config.ListenAdmin != "" {
 		r.Log.Info(
-			"Gatekeeper proxy admin service starting",
+			"gatekeeper proxy admin service starting",
 			zap.String("interface", r.Config.ListenAdmin),
 		)
 
@@ -1006,10 +1005,8 @@ func (r *OauthProxy) Run() (context.Context, error) {
 		r.AdminServer = adminsvc
 		r.ErrGroup.Go(func() error {
 			if err := adminsvc.Serve(adminListener); err != nil {
-				if !errors.Is(err, http.ErrServerClosed) {
-					r.Log.Error("failed to start the admin service", zap.Error(err))
-					return err
-				}
+				err = errors.Join(apperrors.ErrStartAdminHTTP, err)
+				return err
 			}
 			return nil
 		})
@@ -1034,7 +1031,7 @@ func (r *OauthProxy) Shutdown() error {
 	}
 	for idx, srv := range servers {
 		if srv != nil {
-			r.Log.Debug("Shutdown http server", zap.Int("num", idx))
+			r.Log.Debug("shutdown http server", zap.Int("num", idx))
 			if errShut := srv.Shutdown(ctx); errShut != nil {
 				if closeErr := srv.Close(); closeErr != nil {
 					err = errors.Join(err, closeErr)
@@ -1043,9 +1040,11 @@ func (r *OauthProxy) Shutdown() error {
 		}
 	}
 
-	r.Log.Debug("Waiting for goroutines to finish")
+	r.Log.Debug("waiting for goroutines to finish")
 	if routineErr := r.ErrGroup.Wait(); routineErr != nil {
-		err = errors.Join(err, routineErr)
+		if !errors.Is(routineErr, http.ErrServerClosed) {
+			err = errors.Join(err, routineErr)
+		}
 	}
 
 	return err

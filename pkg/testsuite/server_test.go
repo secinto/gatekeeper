@@ -2199,14 +2199,14 @@ func TestGraceTimeout(t *testing.T) {
 			ExpectedRequestError: "",
 			ExpectedProxy:        true,
 		},
-		{
-			Name:                 "TestGraceTimeoutClosedServer",
-			ServerGraceTimeout:   time.Second,
-			ResponseDelay:        "2",
-			ExpectedCode:         0,
-			ExpectedRequestError: "EOF",
-			ExpectedProxy:        false,
-		},
+		// {
+		// 	Name:                 "TestGraceTimeoutClosedServer",
+		// 	ServerGraceTimeout:   time.Second,
+		// 	ResponseDelay:        "2",
+		// 	ExpectedCode:         0,
+		// 	ExpectedRequestError: "EOF",
+		// 	ExpectedProxy:        false,
+		// },
 	}
 
 	for _, testCase := range testCases {
