@@ -158,6 +158,7 @@ var (
 	ErrTooManyDefaultAllowedQueryParams     = errors.New("you have more default query params than allowed query params")
 	ErrMissingDefaultQueryParamInAllowed    = errors.New("param is present in default query params but missing in allowed")
 	ErrDefaultQueryParamNotAllowed          = errors.New("default query param is not in allowed query params")
+	ErrLoAWithNoRedirects                   = errors.New("level of authentication is not valid with noredirects=true")
 
 	ErrCertSelfNoHostname    = errors.New("no hostnames specified")
 	ErrCertSelfLowExpiration = errors.New("expiration must be greater then 5 minutes")

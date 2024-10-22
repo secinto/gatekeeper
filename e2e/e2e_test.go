@@ -15,14 +15,17 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/go-jose/go-jose/v4/jwt"
 	. "github.com/onsi/ginkgo/v2" //nolint:revive //we want to use it for ginkgo
 	. "github.com/onsi/gomega"    //nolint:revive //we want to use it for gomega
+	"github.com/pquerna/otp/totp"
 	"golang.org/x/oauth2/clientcredentials"
 
 	resty "github.com/go-resty/resty/v2"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
 	keycloakcore "github.com/gogatekeeper/gatekeeper/pkg/keycloak/proxy/core"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
 	"github.com/gogatekeeper/gatekeeper/pkg/testsuite"
 )
 
@@ -34,6 +37,8 @@ const (
 	pkceTestClientSecret    = "F2GqU40xwX0P2LrTvHUHqwNoSk4U4n5R"
 	umaTestClient           = "test-client-uma"
 	umaTestClientSecret     = "A5vokiGdI3H2r4aXFrANbKvn4R7cbf6P"
+	loaTestClient           = "test-loa"
+	loaTestClientSecret     = "4z9PoOooXNFmSCPZx0xHXaUxX4eYGFO0"
 	timeout                 = time.Second * 300
 	idpURI                  = "http://localhost:8081"
 	localURI                = "http://localhost:"
@@ -42,12 +47,19 @@ const (
 	anyURI                  = "/any"
 	testUser                = "myuser"
 	testPass                = "baba1234"
+	testLoAUser             = "myloa"
+	testLoAPass             = "baba5678"
 	testPath                = "/test"
 	umaAllowedPath          = "/pets"
 	umaForbiddenPath        = "/pets/1"
 	umaNonExistentPath      = "/cat"
 	umaMethodAllowedPath    = "/horse"
 	umaFwdMethodAllowedPath = "/turtle"
+	loaPath                 = "/level"
+	loaStepUpPath           = "/level2"
+	loaDefaultLevel         = "level1"
+	loaStepUpLevel          = "level2"
+	otpSecret               = "NE4VKZJYKVDDSYTIK5CVOOLVOFDFE2DC"
 	postLoginRedirectPath   = "/post/login/path"
 	pkceCookieName          = "TESTPKCECOOKIE"
 )
@@ -79,7 +91,13 @@ func startAndWait(portNum string, osArgs []string) {
 	}, timeout, 15*time.Second).Should(Succeed())
 }
 
-func codeFlowLogin(client *resty.Client, reqAddress string, expStatusCode int) *resty.Response {
+func codeFlowLogin(
+	client *resty.Client,
+	reqAddress string,
+	expStatusCode int,
+	userName string,
+	userPass string,
+) *resty.Response {
 	client.SetRedirectPolicy(resty.FlexibleRedirectPolicy(5))
 	resp, err := client.R().Get(reqAddress)
 	Expect(err).NotTo(HaveOccurred())
@@ -95,8 +113,8 @@ func codeFlowLogin(client *resty.Client, reqAddress string, expStatusCode int) *
 		action, exists := s.Attr("action")
 		Expect(exists).To(BeTrue())
 
-		client.FormData.Add("username", testUser)
-		client.FormData.Add("password", testPass)
+		client.FormData.Add("username", userName)
+		client.FormData.Add("password", userPass)
 		resp, err = client.R().Post(action)
 
 		Expect(err).NotTo(HaveOccurred())
@@ -205,7 +223,7 @@ var _ = Describe("Code Flow login/logout", func() {
 			func(_ context.Context) {
 				var err error
 				rClient := resty.New()
-				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
+				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK, testUser, testPass)
 				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 				body := resp.Body()
 				Expect(strings.Contains(string(body), postLoginRedirectPath)).To(BeTrue())
@@ -269,7 +287,7 @@ var _ = Describe("Code Flow login/logout", func() {
 			func(_ context.Context) {
 				var err error
 				rClient := resty.New()
-				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
+				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK, testUser, testPass)
 				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 				body := resp.Body()
 				Expect(strings.Contains(string(body), postLoginRedirectPath)).To(BeTrue())
@@ -342,7 +360,7 @@ var _ = Describe("Code Flow PKCE login/logout", func() {
 			func(_ context.Context) {
 				var err error
 				rClient := resty.New()
-				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
+				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK, testUser, testPass)
 				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 
 				body := resp.Body()
@@ -423,9 +441,9 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 		It("should logout on both successfully", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
-			resp := codeFlowLogin(rClient, proxyAddressFirst, http.StatusOK)
+			resp := codeFlowLogin(rClient, proxyAddressFirst, http.StatusOK, testUser, testPass)
 			Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
-			resp = codeFlowLogin(rClient, proxyAddressSec, http.StatusOK)
+			resp = codeFlowLogin(rClient, proxyAddressSec, http.StatusOK, testUser, testPass)
 			Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 
 			resp, err = rClient.R().Get(proxyAddressFirst + testPath)
@@ -454,5 +472,209 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 			resp, _ = rClient.R().Get(proxyAddressFirst)
 			Expect(resp.StatusCode()).To(Equal(http.StatusSeeOther))
 		})
+	})
+})
+
+var _ = Describe("Level Of Authentication Code Flow login/logout", func() {
+	var portNum string
+	var proxyAddress string
+
+	BeforeEach(func() {
+		server := httptest.NewServer(&testsuite.FakeUpstreamService{})
+		portNum = generateRandomPort()
+		proxyAddress = localURI + portNum
+
+		osArgs := []string{os.Args[0]}
+		proxyArgs := []string{
+			"--discovery-url=" + idpRealmURI,
+			"--openid-provider-timeout=120s",
+			"--listen=" + allInterfaces + portNum,
+			"--client-id=" + loaTestClient,
+			"--client-secret=" + loaTestClientSecret,
+			"--upstream-url=" + server.URL,
+			"--no-redirects=false",
+			"--skip-access-token-clientid-check=true",
+			"--skip-access-token-issuer-check=true",
+			"--enable-idp-session-check=false",
+			"--enable-default-deny=true",
+			"--enable-loa=true",
+			"--verbose=true",
+			"--resources=uri=" + loaPath + "|acr=level1,level2",
+			"--resources=uri=" + loaStepUpPath + "|acr=level2",
+			"--openid-provider-retry-count=30",
+			"--enable-refresh-tokens=true",
+			"--encryption-key=sdkljfalisujeoir",
+			"--secure-cookie=false",
+			"--post-login-redirect-path=" + postLoginRedirectPath,
+		}
+
+		osArgs = append(osArgs, proxyArgs...)
+		startAndWait(portNum, osArgs)
+	})
+
+	When("Performing standard loa login", func() {
+		It("should login with loa level1=user/password and logout successfully",
+			Label("code_flow"),
+			Label("basic_case"),
+			Label("loa"),
+			func(_ context.Context) {
+				var err error
+				rClient := resty.New()
+				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK, testLoAUser, testLoAPass)
+				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
+				body := resp.Body()
+				Expect(strings.Contains(string(body), postLoginRedirectPath)).To(BeTrue())
+				jarURI, err := url.Parse(proxyAddress)
+				Expect(err).NotTo(HaveOccurred())
+				cookiesLogin := rClient.GetClient().Jar.Cookies(jarURI)
+
+				var accessCookieLogin string
+				for _, cook := range cookiesLogin {
+					if cook.Name == constant.AccessCookie {
+						accessCookieLogin = cook.Value
+					}
+				}
+
+				By("wait for access token expiration")
+				time.Sleep(32 * time.Second)
+				resp, err = rClient.R().Get(proxyAddress + anyURI)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
+				body = resp.Body()
+				Expect(strings.Contains(string(body), anyURI)).To(BeTrue())
+				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+				Expect(err).NotTo(HaveOccurred())
+				cookiesAfterRefresh := rClient.GetClient().Jar.Cookies(jarURI)
+
+				var accessCookieAfterRefresh string
+				for _, cook := range cookiesAfterRefresh {
+					if cook.Name == constant.AccessCookie {
+						accessCookieLogin = cook.Value
+					}
+				}
+
+				By("check if access token cookie has changed")
+				Expect(accessCookieLogin).NotTo(Equal(accessCookieAfterRefresh))
+
+				By("make another request with new access token")
+				resp, err = rClient.R().Get(proxyAddress + anyURI)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
+				body = resp.Body()
+				Expect(strings.Contains(string(body), anyURI)).To(BeTrue())
+				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+
+				By("verify access token contains default acr value")
+				token, err := jwt.ParseSigned(accessCookieLogin, constant.SignatureAlgs[:])
+				Expect(err).NotTo(HaveOccurred())
+				customClaims := models.CustClaims{}
+
+				err = token.UnsafeClaimsWithoutVerification(&customClaims)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(customClaims.Acr).To(Equal(loaDefaultLevel))
+
+				By("log out")
+				resp, err = rClient.R().Get(proxyAddress + logoutURI)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+
+				rClient.SetRedirectPolicy(resty.NoRedirectPolicy())
+				resp, _ = rClient.R().Get(proxyAddress)
+				Expect(resp.StatusCode()).To(Equal(http.StatusSeeOther))
+			},
+		)
+	})
+
+	When("Performing step up loa login", func() {
+		It("should login with loa level2=user/password and logout successfully",
+			Label("code_flow"),
+			Label("basic_case"),
+			Label("loa"),
+			func(_ context.Context) {
+				var err error
+				rClient := resty.New()
+				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK, testLoAUser, testLoAPass)
+				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
+				body := resp.Body()
+				Expect(strings.Contains(string(body), postLoginRedirectPath)).To(BeTrue())
+				jarURI, err := url.Parse(proxyAddress)
+				Expect(err).NotTo(HaveOccurred())
+				cookiesLogin := rClient.GetClient().Jar.Cookies(jarURI)
+
+				var accessCookieLogin string
+				for _, cook := range cookiesLogin {
+					if cook.Name == constant.AccessCookie {
+						accessCookieLogin = cook.Value
+					}
+				}
+
+				By("verify access token contains default acr value")
+				token, err := jwt.ParseSigned(accessCookieLogin, constant.SignatureAlgs[:])
+				Expect(err).NotTo(HaveOccurred())
+				customClaims := models.CustClaims{}
+
+				err = token.UnsafeClaimsWithoutVerification(&customClaims)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(customClaims.Acr).To(Equal(loaDefaultLevel))
+
+				By("make step up request")
+				resp, err = rClient.R().Get(proxyAddress + loaStepUpPath)
+				Expect(err).NotTo(HaveOccurred())
+				body = resp.Body()
+
+				doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
+				Expect(err).NotTo(HaveOccurred())
+
+				selection := doc.Find("#kc-otp-login-form")
+				Expect(selection).ToNot(BeNil())
+				Expect(selection.Nodes).ToNot(BeEmpty())
+
+				selection.Each(func(_ int, s *goquery.Selection) {
+					action, exists := s.Attr("action")
+					Expect(exists).To(BeTrue())
+
+					otp, errOtp := totp.GenerateCode(otpSecret, time.Now().UTC())
+					Expect(errOtp).NotTo(HaveOccurred())
+					rClient.FormData.Del("username")
+					rClient.FormData.Del("password")
+					rClient.FormData.Set("otp", otp)
+					rClient.SetRedirectPolicy(resty.FlexibleRedirectPolicy(2))
+					rClient.SetBaseURL(proxyAddress)
+					resp, err = rClient.R().Post(action)
+					loc := resp.Header().Get("Location")
+
+					resp, err = rClient.R().Get(loc)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(strings.Contains(string(resp.Body()), loaStepUpPath)).To(BeTrue())
+					Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+
+					By("verify access token contains raised acr value")
+					cookiesLogin := rClient.GetClient().Jar.Cookies(jarURI)
+
+					var accessCookieLogin string
+					for _, cook := range cookiesLogin {
+						if cook.Name == constant.AccessCookie {
+							accessCookieLogin = cook.Value
+						}
+					}
+					token, err = jwt.ParseSigned(accessCookieLogin, constant.SignatureAlgs[:])
+					Expect(err).NotTo(HaveOccurred())
+					customClaims := models.CustClaims{}
+
+					err = token.UnsafeClaimsWithoutVerification(&customClaims)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(customClaims.Acr).To(Equal(loaStepUpLevel))
+				})
+
+				By("log out")
+				resp, err = rClient.R().Get(proxyAddress + logoutURI)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
+
+				rClient.SetRedirectPolicy(resty.NoRedirectPolicy())
+				resp, _ = rClient.R().Get(proxyAddress)
+				Expect(resp.StatusCode()).To(Equal(http.StatusSeeOther))
+			},
+		)
 	})
 })

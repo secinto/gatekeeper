@@ -230,6 +230,7 @@ func ExtractIdentity(token *jwt.JSONWebToken) (*models.UserContext, error) {
 	return &models.UserContext{
 		Audiences:     audiences,
 		Email:         customClaims.Email,
+		Acr:           customClaims.Acr,
 		ExpiresAt:     stdClaims.Expiry.Time(),
 		Groups:        customClaims.Groups,
 		ID:            stdClaims.Subject,

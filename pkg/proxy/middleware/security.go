@@ -141,7 +141,6 @@ func AdmissionMiddleware(
 
 			if len(resource.Headers) > 0 {
 				var reqHeaders []string
-
 				for _, resVal := range resource.Headers {
 					resVals := strings.Split(resVal, ":")
 					name := resVals[0]

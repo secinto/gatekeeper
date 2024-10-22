@@ -23,6 +23,7 @@ type RealmRoles struct {
 // Extract custom claims
 type CustClaims struct {
 	Email          string                 `json:"email"`
+	Acr            string                 `json:"acr"`
 	PrefName       string                 `json:"preferred_username"`
 	RealmAccess    RealmRoles             `json:"realm_access"`
 	Groups         []string               `json:"groups"`
@@ -58,6 +59,8 @@ type UserContext struct {
 	BearerToken bool
 	// the email associated to the user
 	Email string
+	// current level of authentication for user
+	Acr string
 	// the expiration of the access token
 	ExpiresAt time.Time
 	// groups is a collection of groups where user is member

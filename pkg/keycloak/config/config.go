@@ -179,6 +179,7 @@ type Config struct {
 	EnableProxyProtocol             bool `env:"ENABLE_PROXY_PROTOCOL" json:"enabled-proxy-protocol" usage:"enable proxy protocol" yaml:"enabled-proxy-protocol"`
 	UseLetsEncrypt                  bool `env:"USE_LETS_ENCRYPT" json:"use-letsencrypt" usage:"use letsencrypt for certificates" yaml:"use-letsencrypt"`
 	DisableAllLogging               bool `env:"DISABLE_ALL_LOGGING" json:"disable-all-logging" usage:"disables all logging to stdout and stderr" yaml:"disable-all-logging"`
+	EnableLoA                       bool `env:"ENABLE_LOA" json:"enable-loa" usage:"enables level of authentication" yaml:"enable-loa"`
 	IsDiscoverURILegacy             bool
 }
 
@@ -555,6 +556,7 @@ func (r *Config) isReverseProxySettingsValid() error {
 			r.isEnableHmacValid,
 			r.isPostLogoutRedirectURIValid,
 			r.isAllowedQueryParamsValid,
+			r.isEnableLoAValid,
 		}
 
 		for _, validationFunc := range validationRegistry {
@@ -894,6 +896,13 @@ func (r *Config) isAllowedQueryParamsValid() error {
 		if allowedVal != "" && val != allowedVal {
 			return apperrors.ErrDefaultQueryParamNotAllowed
 		}
+	}
+	return nil
+}
+
+func (r *Config) isEnableLoAValid() error {
+	if r.EnableLoA && r.NoRedirects {
+		return apperrors.ErrLoAWithNoRedirects
 	}
 	return nil
 }

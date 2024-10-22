@@ -50,7 +50,7 @@ var _ = Describe("UMA Code Flow authorization", func() {
 		It("should login with user/password and logout successfully", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
-			resp := codeFlowLogin(rClient, proxyAddress+umaAllowedPath, http.StatusOK)
+			resp := codeFlowLogin(rClient, proxyAddress+umaAllowedPath, http.StatusOK, testUser, testPass)
 			Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 
 			body := resp.Body()
@@ -76,7 +76,7 @@ var _ = Describe("UMA Code Flow authorization", func() {
 	When("Accessing resource, which does not exist", func() {
 		It("should be forbidden without permission ticket", func(_ context.Context) {
 			rClient := resty.New()
-			resp := codeFlowLogin(rClient, proxyAddress+umaNonExistentPath, http.StatusForbidden)
+			resp := codeFlowLogin(rClient, proxyAddress+umaNonExistentPath, http.StatusForbidden, testUser, testPass)
 
 			body := resp.Body()
 			Expect(strings.Contains(string(body), umaCookieName)).To(BeFalse())
@@ -87,7 +87,7 @@ var _ = Describe("UMA Code Flow authorization", func() {
 		It("should be forbidden and then allowed", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
-			resp := codeFlowLogin(rClient, proxyAddress+umaForbiddenPath, http.StatusForbidden)
+			resp := codeFlowLogin(rClient, proxyAddress+umaForbiddenPath, http.StatusForbidden, testUser, testPass)
 
 			body := resp.Body()
 			Expect(strings.Contains(string(body), umaCookieName)).To(BeFalse())
@@ -146,7 +146,7 @@ var _ = Describe("UMA Code Flow authorization with method scope", func() {
 		It("should login with user/password, don't access forbidden resource and logout successfully", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
-			resp := codeFlowLogin(rClient, proxyAddress+umaMethodAllowedPath, http.StatusOK)
+			resp := codeFlowLogin(rClient, proxyAddress+umaMethodAllowedPath, http.StatusOK, testUser, testPass)
 			Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 
 			body := resp.Body()
@@ -391,7 +391,7 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 				"X-Forwarded-URI":    umaMethodAllowedPath,
 				"X-Forwarded-Method": "GET",
 			})
-			resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK)
+			resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK, testUser, testPass)
 			Expect(resp.Header().Get(constant.AuthorizationHeader)).ToNot(BeEmpty())
 
 			resp, err = rClient.R().Get(proxyAddress + logoutURI)
@@ -413,7 +413,7 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 				"X-Forwarded-URI":    umaMethodAllowedPath,
 				"X-Forwarded-Method": "POST",
 			})
-			resp := codeFlowLogin(rClient, proxyAddress, http.StatusForbidden)
+			resp := codeFlowLogin(rClient, proxyAddress, http.StatusForbidden, testUser, testPass)
 			Expect(resp.Header().Get(constant.AuthorizationHeader)).To(BeEmpty())
 		})
 	})
@@ -426,7 +426,7 @@ var _ = Describe("UMA Code Flow, NOPROXY authorization with method scope", func(
 				"X-Forwarded-Host":  strings.Split(proxyAddress, "//")[1],
 				"X-Forwarded-URI":   umaMethodAllowedPath,
 			})
-			resp := codeFlowLogin(rClient, proxyAddress, http.StatusForbidden)
+			resp := codeFlowLogin(rClient, proxyAddress, http.StatusForbidden, testUser, testPass)
 			Expect(resp.Header().Get(constant.AuthorizationHeader)).To(BeEmpty())
 		})
 	})

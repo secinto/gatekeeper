@@ -41,6 +41,8 @@ type Resource struct {
 	Roles []string `json:"roles" yaml:"roles"`
 	// Groups is a list of groups the user is in
 	Groups []string `json:"groups" yaml:"groups"`
+	// Acr (Authentication Context Class Reference) is a list of allowed levels of authentication for user
+	Acr []string `json:"acr" yaml:"acr"`
 }
 
 func NewResource() *Resource {
@@ -66,7 +68,7 @@ func (r *Resource) Parse(resource string) (*Resource, error) {
 			return nil,
 				errors.New(
 					"invalid resource keypair, should be " +
-						"(uri|roles|headers|methods|white-listed)=comma_values",
+						"(uri|roles|headers|methods|acr|white-listed)=comma_values",
 				)
 		}
 
@@ -114,9 +116,11 @@ func (r *Resource) Parse(resource string) (*Resource, error) {
 			}
 
 			r.WhiteListed = value
+		case "acr":
+			r.Acr = strings.Split(keyPair[1], ",")
 		default:
 			return nil,
-				errors.New("invalid identifier, should be roles, uri or methods")
+				errors.New("invalid identifier, should be uri|roles|headers|methods|acr|white-listed")
 		}
 	}
 
@@ -124,6 +128,8 @@ func (r *Resource) Parse(resource string) (*Resource, error) {
 }
 
 // valid ensure the resource is valid
+//
+//nolint:cyclop
 func (r *Resource) Valid() error {
 	if r.Methods == nil {
 		r.Methods = make([]string, 0)
@@ -131,6 +137,10 @@ func (r *Resource) Valid() error {
 
 	if r.Roles == nil {
 		r.Roles = make([]string, 0)
+	}
+
+	if r.Acr == nil {
+		r.Acr = make([]string, 0)
 	}
 
 	if r.URL == "" {
@@ -166,6 +176,11 @@ func (r Resource) GetRoles() string {
 	return strings.Join(r.Roles, ",")
 }
 
+// GetAcr returns a list of authentication levels for this resource
+func (r Resource) GetAcr() string {
+	return strings.Join(r.Acr, ",")
+}
+
 // GetHeaders returns a list of headers for this resource
 func (r Resource) GetHeaders() string {
 	return strings.Join(r.Headers, ",")
@@ -182,6 +197,10 @@ func (r Resource) String() string {
 
 	if len(r.Roles) > 0 {
 		roles = strings.Join(r.Roles, ",")
+	}
+
+	if len(r.Acr) > 0 {
+		roles = strings.Join(r.Acr, ",")
 	}
 
 	if len(r.Methods) > 0 {

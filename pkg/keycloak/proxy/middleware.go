@@ -31,6 +31,8 @@ import (
 	"github.com/gogatekeeper/gatekeeper/pkg/encryption"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/cookie"
 	"github.com/gogatekeeper/gatekeeper/pkg/proxy/models"
+	"github.com/gogatekeeper/gatekeeper/pkg/utils"
+	"golang.org/x/oauth2"
 
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"go.uber.org/zap"
@@ -246,6 +248,76 @@ func authorizationMiddleware(
 				accessForbidden(wrt, req)
 				return
 			}
+			next.ServeHTTP(wrt, req)
+		})
+	}
+}
+
+func levelOfAuthenticationMiddleware(
+	logger *zap.Logger,
+	skipTokenVerification bool,
+	scopes []string,
+	enablePKCE bool,
+	signInPage string,
+	cookManager *cookie.Manager,
+	newOAuth2Config func(redirectionURL string) *oauth2.Config,
+	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
+	customSignInPage func(wrt http.ResponseWriter, authURL string),
+	resource *authorization.Resource,
+	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
+) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			// we don't need to continue is a decision has been made
+			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
+			if !assertOk {
+				logger.Error(apperrors.ErrAssertionFailed.Error())
+				return
+			}
+			if scope.AccessDenied {
+				next.ServeHTTP(wrt, req)
+				return
+			}
+
+			user := scope.Identity
+			lLog := scope.Logger.With(
+				zap.String("middleware", "levelOfAuthentication"),
+				zap.String("userID", user.ID),
+				zap.String("resource", resource.URL),
+			)
+			if len(resource.Acr) > 0 && user.Acr == "" {
+				lLog.Error("token is missing acr claim=level of authentication")
+				accessForbidden(wrt, req)
+				return
+			}
+			if len(resource.Acr) > 0 && !utils.HasAccess(
+				resource.Acr,
+				[]string{user.Acr},
+				false,
+			) {
+				lLog.Info("token doesn't match required level of authentication")
+				allowedQueryParams := map[string]string{"acr_values": resource.Acr[0]}
+				defaultAllowedQueryParams := map[string]string{"acr_values": resource.Acr[0]}
+				uuid := cookManager.DropStateParameterCookie(req, wrt)
+				query := req.URL.Query()
+				query.Add("state", uuid)
+				req.URL.RawQuery = query.Encode()
+				oauthAuthorizationHandler(
+					lLog,
+					skipTokenVerification,
+					scopes,
+					enablePKCE,
+					signInPage,
+					cookManager,
+					newOAuth2Config,
+					getRedirectionURL,
+					customSignInPage,
+					allowedQueryParams,
+					defaultAllowedQueryParams,
+				)(wrt, req)
+				return
+			}
+
 			next.ServeHTTP(wrt, req)
 		})
 	}

@@ -648,6 +648,29 @@ func (r *OauthProxy) CreateReverseProxy() error {
 				r.Config.MatchClaims,
 				accessForbidden,
 			),
+		}
+
+		if r.Config.EnableLoA {
+			middlewares = append(
+				middlewares,
+				levelOfAuthenticationMiddleware(
+					r.Log,
+					r.Config.SkipTokenVerification,
+					r.Config.Scopes,
+					r.Config.EnablePKCE,
+					r.Config.SignInPage,
+					r.Cm,
+					newOAuth2Config,
+					getRedirectionURL,
+					customSignInPage,
+					res,
+					accessForbidden,
+				),
+			)
+		}
+
+		middlewares = append(
+			middlewares,
 			gmiddleware.IdentityHeadersMiddleware(
 				r.Log,
 				r.Config.AddClaims,
@@ -658,7 +681,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 				r.Config.EnableAuthorizationHeader,
 				r.Config.EnableAuthorizationCookies,
 			),
-		}
+		)
 
 		if res.URL == constant.AllPath && !res.WhiteListed && enableDefaultDenyStrict {
 			middlewares = []func(http.Handler) http.Handler{
@@ -701,6 +724,29 @@ func (r *OauthProxy) CreateReverseProxy() error {
 					r.Config.MatchClaims,
 					accessForbidden,
 				),
+			}
+
+			if r.Config.EnableLoA {
+				middlewares = append(
+					middlewares,
+					levelOfAuthenticationMiddleware(
+						r.Log,
+						r.Config.SkipTokenVerification,
+						r.Config.Scopes,
+						r.Config.EnablePKCE,
+						r.Config.SignInPage,
+						r.Cm,
+						newOAuth2Config,
+						getRedirectionURL,
+						customSignInPage,
+						res,
+						accessForbidden,
+					),
+				)
+			}
+
+			middlewares = append(
+				middlewares,
 				gmiddleware.IdentityHeadersMiddleware(
 					r.Log,
 					r.Config.AddClaims,
@@ -711,7 +757,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 					r.Config.EnableAuthorizationHeader,
 					r.Config.EnableAuthorizationCookies,
 				),
-			}
+			)
 		}
 
 		e := engine.With(middlewares...)
