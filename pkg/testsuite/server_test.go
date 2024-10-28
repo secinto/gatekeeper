@@ -1870,7 +1870,7 @@ func TestTLS(t *testing.T) {
 				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.Listen = testProxyAddr
-				conf.TLSMinVersion = "tlsv1.0"
+				conf.TLSMinVersion = constant.TLS13
 				conf.NoRedirects = true
 			},
 			ExecutionSettings: []fakeRequest{
@@ -1878,7 +1878,7 @@ func TestTLS(t *testing.T) {
 					URL:          fmt.Sprintf("https://%s/test", testProxyAddr),
 					ExpectedCode: http.StatusUnauthorized,
 					RequestCA:    fakeCA,
-					TLSMin:       tls.VersionTLS10,
+					TLSMin:       tls.VersionTLS13,
 					Redirects:    false,
 				},
 			},
@@ -1891,7 +1891,7 @@ func TestTLS(t *testing.T) {
 				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.Listen = testProxyAddr
-				conf.TLSMinVersion = "tlsv1.2"
+				conf.TLSMinVersion = constant.TLS12
 				conf.NoRedirects = true
 			},
 			ExecutionSettings: []fakeRequest{
@@ -1912,7 +1912,7 @@ func TestTLS(t *testing.T) {
 				conf.TLSPrivateKey = os.TempDir() + FakePrivFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.TLSCaCertificate = os.TempDir() + FakeCaFilePrefix + strconv.Itoa(rand.Intn(10000))
 				conf.Listen = testProxyAddr
-				conf.TLSMinVersion = "tlsv1.3"
+				conf.TLSMinVersion = constant.TLS13
 			},
 			ExecutionSettings: []fakeRequest{
 				{
