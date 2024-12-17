@@ -19,11 +19,9 @@ linters:
   enable-all: true
   disable:
     - depguard
-    - thelper
     - ireturn
     - maintidx
     - wrapcheck
-    - gocritic
     - gci
     - gofumpt
     - nlreturn
@@ -44,5 +42,4 @@ linters:
     # TODO: Revisit after the refactor
     - gocognit
     - testpackage
-    - godot
     - nestif

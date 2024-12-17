@@ -1643,6 +1643,7 @@ func delay(no int, _ *resty.Request, _ *resty.Response) {
 }
 
 func checkAccessTokenEncryption(t *testing.T, cfg *config.Config, value string) bool {
+	t.Helper()
 	rawToken, err := encryption.DecodeText(value, cfg.EncryptionKey)
 
 	if err != nil {
@@ -1996,7 +1997,7 @@ func TestAdmissionHandlerRoles(t *testing.T) {
 	newFakeProxy(cfg, &fakeAuthConfig{}).RunTests(t, requests)
 }
 
-// check to see if custom headers are hitting the upstream
+// check to see if custom headers are hitting the upstream.
 func TestCustomHeaders(t *testing.T) {
 	requests := []struct {
 		Headers map[string]string
