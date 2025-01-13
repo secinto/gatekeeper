@@ -842,6 +842,21 @@ func TestServiceRedirect(t *testing.T) {
 			Name: "TestRedirects",
 			ProxySettings: func(conf *config.Config) {
 				conf.NoRedirects = false
+				conf.Resources = []*authorization.Resource{
+					{
+						URL:         FakeAdminURL,
+						WhiteListed: false,
+						Methods:     utils.AllHTTPMethods,
+						Roles:       []string{},
+					},
+					{
+						URL:         FakeTestURL,
+						NoRedirect:  true,
+						WhiteListed: false,
+						Methods:     utils.AllHTTPMethods,
+						Roles:       []string{},
+					},
+				}
 			},
 			ExecutionSettings: []fakeRequest{
 				{
@@ -850,16 +865,40 @@ func TestServiceRedirect(t *testing.T) {
 					ExpectedCode:     http.StatusSeeOther,
 					ExpectedLocation: "/oauth/authorize?state",
 				},
+				{
+					URI:          FakeTestURL,
+					Redirects:    false,
+					ExpectedCode: http.StatusUnauthorized,
+				},
 			},
 		},
 		{
 			Name: "TestNoRedirects",
 			ProxySettings: func(conf *config.Config) {
 				conf.NoRedirects = true
+				conf.Resources = []*authorization.Resource{
+					{
+						URL:         FakeAdminURL,
+						WhiteListed: false,
+						Methods:     utils.AllHTTPMethods,
+						Roles:       []string{},
+					},
+					{
+						URL:         FakeTestURL,
+						NoRedirect:  false,
+						WhiteListed: false,
+						Methods:     utils.AllHTTPMethods,
+						Roles:       []string{},
+					},
+				}
 			},
 			ExecutionSettings: []fakeRequest{
 				{
 					URI:          FakeAdminURL,
+					ExpectedCode: http.StatusUnauthorized,
+				},
+				{
+					URI:          FakeTestURL,
 					ExpectedCode: http.StatusUnauthorized,
 				},
 			},
