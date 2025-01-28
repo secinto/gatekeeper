@@ -56,11 +56,14 @@ func oauthAuthorizationHandler(
 	skipTokenVerification bool,
 	scopes []string,
 	enablePKCE bool,
+	registrationEnabled bool,
 	signInPage string,
+	registerPage string,
 	cookManager *cookie.Manager,
 	newOAuth2Config func(redirectionURL string) *oauth2.Config,
 	getRedirectionURL func(wrt http.ResponseWriter, req *http.Request) string,
 	customSignInPage func(wrt http.ResponseWriter, authURL string),
+	customRegisterPage func(wrt http.ResponseWriter, authURL string),
 	allowedQueryParams map[string]string,
 	defaultAllowedQueryParams map[string]string,
 ) func(wrt http.ResponseWriter, req *http.Request) {
@@ -152,6 +155,15 @@ func oauthAuthorizationHandler(
 		// step: if we have a custom sign in page, lets display that
 		if signInPage != "" {
 			customSignInPage(wrt, authURL)
+			return
+		}
+
+		if registrationEnabled {
+			authURL = strings.Replace(authURL, "auth", "registrations", 1)
+		}
+
+		if registerPage != "" && registrationEnabled {
+			customRegisterPage(wrt, authURL)
 			return
 		}
 
