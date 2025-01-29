@@ -253,18 +253,20 @@ func IdentityHeadersMiddleware(
 
 			if scope.Identity != nil {
 				user := scope.Identity
-				headers.Set("X-Auth-Audience", strings.Join(user.Audiences, ","))
-				headers.Set("X-Auth-Email", user.Email)
-				headers.Set("X-Auth-Expiresin", user.ExpiresAt.String())
-				headers.Set("X-Auth-Groups", strings.Join(user.Groups, ","))
-				headers.Set("X-Auth-Roles", strings.Join(user.Roles, ","))
-				headers.Set("X-Auth-Subject", user.ID)
-				headers.Set("X-Auth-Userid", user.Name)
-				headers.Set("X-Auth-Username", user.Name)
+				if !user.SkipVerification {
+					headers.Set("X-Auth-Audience", strings.Join(user.Audiences, ","))
+					headers.Set("X-Auth-Email", user.Email)
+					headers.Set("X-Auth-Expiresin", user.ExpiresAt.String())
+					headers.Set("X-Auth-Groups", strings.Join(user.Groups, ","))
+					headers.Set("X-Auth-Roles", strings.Join(user.Roles, ","))
+					headers.Set("X-Auth-Subject", user.ID)
+					headers.Set("X-Auth-Userid", user.Name)
+					headers.Set("X-Auth-Username", user.Name)
 
-				// should we add the token header?
-				if enableTokenHeader {
-					headers.Set("X-Auth-Token", user.RawToken)
+					// should we add the token header?
+					if enableTokenHeader {
+						headers.Set("X-Auth-Token", user.RawToken)
+					}
 				}
 				// add the authorization header if requested
 				if enableAuthzHeader {
