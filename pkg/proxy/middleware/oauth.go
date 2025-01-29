@@ -438,7 +438,7 @@ func NoRedirectToAuthorizationMiddleware(
 			logger.Debug("Request path", zap.String("request-path", req.UserAgent()))
 			logger.Debug("Request header", zap.String("request-header", req.Header.Get("Git-Protocol")))
 			logger.Debug("Request user agent", zap.String("user-agent", req.URL.Path))
-			
+
 			if scope.AccessDenied {
 				wrt.WriteHeader(http.StatusUnauthorized)
 				return
