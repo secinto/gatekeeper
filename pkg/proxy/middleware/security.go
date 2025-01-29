@@ -142,6 +142,7 @@ func AdmissionMiddleware(
 			if len(resource.Headers) > 0 {
 				var reqHeaders []string
 				for _, resVal := range resource.Headers {
+					lLog.Debug("Checking header", zap.String(":", resVal))
 					resVals := strings.Split(resVal, ":")
 					name := resVals[0]
 					canonName := http.CanonicalHeaderKey(name)
@@ -169,6 +170,9 @@ func AdmissionMiddleware(
 						zap.String("headers", resource.GetHeaders()))
 					accessForbidden(wrt, req)
 					return
+				} else {
+					lLog.Warn("access granted, correct headers",
+						zap.String("headers", resource.GetHeaders()))
 				}
 			}
 
