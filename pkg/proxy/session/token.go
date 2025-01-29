@@ -149,7 +149,7 @@ func GetIdentity(
 
 		purell.NormalizeURL(req.URL, purell.FlagRemoveDotSegments|purell.FlagRemoveDuplicateSlashes)
 		if strings.Contains(strings.ToLower(req.UserAgent()), "git/") && strings.HasSuffix(strings.ToLower(req.URL.Path), "info/refs") && strings.ToLower(req.Header.Get("Git-Protocol")) == "version=2" {
-			rawToken := req.Header.Get(constant.AuthorizationHeader)
+
 			stdClaims := &jwt.Claims{}
 			customClaims := models.CustClaims{}
 			user := &models.UserContext{
@@ -163,7 +163,16 @@ func GetIdentity(
 				Groups:        []string{"ProxyAuth"},
 			}
 
-			user.BearerToken = true
+			authHeader := req.Header.Get(constant.AuthorizationHeader)
+			var rawToken string
+			if strings.Contains(authHeader, "Basic") {
+				rawToken = strings.ReplaceAll(authHeader, "Basic ", "")
+				user.BearerToken = false
+			} else if strings.Contains(authHeader, "Bearer") {
+				rawToken = strings.ReplaceAll(authHeader, "Bearer ", "")
+				user.BearerToken = true
+			}
+
 			user.RawToken = rawToken
 
 			logger.Debug("found the user identity",
