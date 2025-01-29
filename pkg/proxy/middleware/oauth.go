@@ -91,7 +91,7 @@ func AuthenticationMiddleware(
 						"skipping verification - TESTING ONLY",
 				)
 
-				if user.IsExpired() {
+				if user.IsExpired() && !user.SkipVerification {
 					lLog.Error(apperrors.ErrSessionExpiredVerifyOff.Error())
 					core.RevokeProxy(logger, req)
 					next.ServeHTTP(wrt, req)
