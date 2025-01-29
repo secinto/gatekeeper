@@ -169,6 +169,8 @@ func GetIdentity(
 				zap.String("email", user.Email),
 				zap.String("roles", strings.Join(user.Roles, ",")),
 				zap.String("groups", strings.Join(user.Groups, ",")))
+
+			user.SkipVerification = true
 			return user, nil
 		} else {
 			var isBearer bool
@@ -265,17 +267,18 @@ func ExtractIdentity(token *jwt.JSONWebToken) (*models.UserContext, error) {
 	}
 
 	return &models.UserContext{
-		Audiences:     audiences,
-		Email:         customClaims.Email,
-		Acr:           customClaims.Acr,
-		ExpiresAt:     stdClaims.Expiry.Time(),
-		Groups:        customClaims.Groups,
-		ID:            stdClaims.Subject,
-		Name:          preferredName,
-		PreferredName: preferredName,
-		Roles:         roleList,
-		Claims:        jsonMap,
-		Permissions:   customClaims.Authorization,
+		Audiences:        audiences,
+		Email:            customClaims.Email,
+		Acr:              customClaims.Acr,
+		ExpiresAt:        stdClaims.Expiry.Time(),
+		Groups:           customClaims.Groups,
+		ID:               stdClaims.Subject,
+		Name:             preferredName,
+		PreferredName:    preferredName,
+		Roles:            roleList,
+		Claims:           jsonMap,
+		Permissions:      customClaims.Authorization,
+		SkipVerification: false,
 	}, nil
 }
 

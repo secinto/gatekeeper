@@ -85,7 +85,7 @@ func AuthenticationMiddleware(
 			oidcLibCtx := context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 
 			// step: skip if we are running skip-token-verification
-			if skipTokenVerification {
+			if skipTokenVerification || user.SkipVerification {
 				scope.Logger.Warn(
 					"skip token verification enabled, " +
 						"skipping verification - TESTING ONLY",
