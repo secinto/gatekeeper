@@ -373,6 +373,14 @@ func ProxyMiddleware(
 				return
 			}
 			logger.Debug("forwarding request to upstream", zap.String("URL", req.URL.Path))
+			logger.Debug("Request: ")
+			for key, val := range req.Header {
+				// Logic using key
+				// And val if you need it
+				for _, value := range val {
+					logger.Debug(key + ": " + value)
+				}
+			}
 			upstream.ServeHTTP(wrt, req)
 		})
 	}
