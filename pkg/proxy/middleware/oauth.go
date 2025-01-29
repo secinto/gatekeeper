@@ -52,6 +52,7 @@ func AuthenticationMiddleware(
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			logger.Debug("Before checking scope")
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 			if !assertOk {
 				logger.Error(apperrors.ErrAssertionFailed.Error())
