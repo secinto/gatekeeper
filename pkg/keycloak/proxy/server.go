@@ -812,12 +812,12 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		for _, method := range res.Methods {
 			if !res.WhiteListed {
 				e.MethodFunc(method, res.URL, handlers.EmptyHandler)
-				r.Log.Info("Adding resource to whitelisted", zap.String("resource", res.URL))
+				r.Log.Info("Adding resource to NOT whitelisted", zap.String("resource", res.URL))
 				continue
 			}
-			r.Log.Info("Adding resource to NOT whitelisted", zap.String("resource", res.URL))
+			r.Log.Info("Adding resource to whitelisted", zap.String("resource", res.URL))
 
-			engine.MethodFunc(method, res.URL, handlers.EmptyHandler)
+			engine.MethodFunc(method, res.URL, handlers.NotSoEmptyHandler(r.Log))
 		}
 	}
 
