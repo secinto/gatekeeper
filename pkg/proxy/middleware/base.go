@@ -302,6 +302,8 @@ func ProxyMiddleware(
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+			logger.Debug("before serving next in proxy middleware")
+
 			next.ServeHTTP(wrt, req)
 
 			// @step: retrieve the request scope
