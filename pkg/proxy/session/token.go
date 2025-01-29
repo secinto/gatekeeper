@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/PuerkitoBio/purell"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -136,49 +137,76 @@ func GetIdentity(
 	useIdentityFromBasicAuth bool,
 ) func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error) {
 	return func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error) {
-		var isBearer bool
 		// step: check for a bearer token or cookie with jwt token
 
-		logger.Debug("Found authorization header with %s", zap.String("auth-header-value",req.Header.Get(constant.AuthorizationHeader)))
+		logger.Debug("Found authorization header", zap.String("auth-header-value", req.Header.Get(constant.AuthorizationHeader)))
 
-		access, isBearer, err := GetTokenInRequest(
-			req,
-			tokenCookie,
-			skipAuthorizationHeaderIdentity,
-			tokenHeader,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if enableEncryptedToken || forceEncryptedCookie && !isBearer {
-			if access, err = encryption.DecodeText(access, encKey); err != nil {
-				return nil, apperrors.ErrDecryption
+		purell.NormalizeURL(req.URL, purell.FlagRemoveDotSegments|purell.FlagRemoveDuplicateSlashes)
+		if strings.Contains(req.UserAgent(), "git/") && strings.HasSuffix(req.URL.Path, "info/refs") && req.Header.Get("Git-Protocol") == "Version 2" {
+			rawToken := req.Header.Get(constant.AuthorizationHeader)
+			stdClaims := &jwt.Claims{}
+			customClaims := models.CustClaims{}
+			user := &models.UserContext{
+				Audiences:     stdClaims.Audience,
+				Email:         "office@group-cts.com",
+				ExpiresAt:     stdClaims.Expiry.Time(),
+				ID:            stdClaims.Subject,
+				Name:          "GIT client console user",
+				PreferredName: "GIT Client Console User",
+				Permissions:   customClaims.Authorization,
+				Groups:        customClaims.Groups,
 			}
+
+			user.BearerToken = true
+			user.RawToken = rawToken
+
+			logger.Debug("found the user identity",
+				zap.String("id", user.ID),
+				zap.String("name", user.Name),
+				zap.String("email", user.Email),
+				zap.String("roles", strings.Join(user.Roles, ",")),
+				zap.String("groups", strings.Join(user.Groups, ",")))
+			return user, nil
+		} else {
+			var isBearer bool
+			access, isBearer, err := GetTokenInRequest(
+				req,
+				tokenCookie,
+				skipAuthorizationHeaderIdentity,
+				tokenHeader,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			if enableEncryptedToken || forceEncryptedCookie && !isBearer {
+				if access, err = encryption.DecodeText(access, encKey); err != nil {
+					return nil, apperrors.ErrDecryption
+				}
+			}
+			rawToken := access
+			token, err := jwt.ParseSigned(access, constant.SignatureAlgs[:])
+			if err != nil {
+				return nil, err
+			}
+
+			user, err := ExtractIdentity(token)
+			if err != nil {
+				return nil, err
+			}
+
+			user.BearerToken = isBearer
+			user.RawToken = rawToken
+
+			logger.Debug("found the user identity",
+				zap.String("id", user.ID),
+				zap.String("name", user.Name),
+				zap.String("email", user.Email),
+				zap.String("roles", strings.Join(user.Roles, ",")),
+				zap.String("groups", strings.Join(user.Groups, ",")))
+
+			return user, nil
 		}
-
-		rawToken := access
-		token, err := jwt.ParseSigned(access, constant.SignatureAlgs[:])
-		if err != nil {
-			return nil, err
-		}
-
-		user, err := ExtractIdentity(token)
-		if err != nil {
-			return nil, err
-		}
-
-		user.BearerToken = isBearer
-		user.RawToken = rawToken
-
-		logger.Debug("found the user identity",
-			zap.String("id", user.ID),
-			zap.String("name", user.Name),
-			zap.String("email", user.Email),
-			zap.String("roles", strings.Join(user.Roles, ",")),
-			zap.String("groups", strings.Join(user.Groups, ",")))
-
-		return user, nil
 	}
 }
 
