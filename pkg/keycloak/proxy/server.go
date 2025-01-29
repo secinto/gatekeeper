@@ -750,8 +750,6 @@ func (r *OauthProxy) CreateReverseProxy() error {
 				gmiddleware.DenyMiddleware(r.Log, accessForbidden),
 				gmiddleware.ProxyDenyMiddleware(r.Log),
 			}
-		} else {
-			r.Log.Info("adding pass through for ", zap.String("resource URL", res.URL))
 		}
 
 		if r.Config.EnableUma || r.Config.EnableOpa {

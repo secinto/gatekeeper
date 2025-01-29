@@ -366,7 +366,7 @@ func ProxyMiddleware(
 				}
 				return
 			}
-
+			logger.Debug("forwarding request to upstream", zap.String("URL", req.URL.Path))
 			upstream.ServeHTTP(wrt, req)
 		})
 	}
