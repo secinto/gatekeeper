@@ -341,6 +341,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.EnableEncryptedToken,
 		r.Config.ForceEncryptedCookie,
 		r.Config.EncryptionKey,
+		r.Config.UseIdentityFromBasicAuth,
 	)
 
 	getRedirectionURL := handlers.GetRedirectionURL(

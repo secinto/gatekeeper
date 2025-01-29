@@ -82,6 +82,7 @@ func GetTokenInBearer(req *http.Request) (string, error) {
 
 	items := strings.Split(token, " ")
 	numItems := 2
+
 	if len(items) != numItems {
 		return "", apperrors.ErrInvalidSession
 	}
@@ -132,10 +133,14 @@ func GetIdentity(
 	enableEncryptedToken bool,
 	forceEncryptedCookie bool,
 	encKey string,
+	useIdentityFromBasicAuth bool,
 ) func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error) {
 	return func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error) {
 		var isBearer bool
 		// step: check for a bearer token or cookie with jwt token
+
+		logger.Debug("Found authorization header with %s", zap.String("auth-header-value",req.Header.Get(constant.AuthorizationHeader)))
+
 		access, isBearer, err := GetTokenInRequest(
 			req,
 			tokenCookie,

@@ -419,17 +419,20 @@ func RedirectToAuthorizationMiddleware(
 	}
 }
 
-// NoRedirectToAuthorizationMiddleware stops request after faild authentication, in no-redirects=true mode.
+// NoRedirectToAuthorizationMiddleware stops request after failed authentication, in no-redirects=true mode.
 func NoRedirectToAuthorizationMiddleware(
 	logger *zap.Logger,
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
+
 			if !assertOk {
 				logger.Error(apperrors.ErrAssertionFailed.Error())
 				return
 			}
+
+			scope.Logger.Debug("noredirecttoauthorization middleware")
 
 			scope.Logger.Debug("noredirecttoauthorization middleware")
 
