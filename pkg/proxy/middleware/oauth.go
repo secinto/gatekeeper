@@ -437,6 +437,9 @@ func NoRedirectToAuthorizationMiddleware(
 				wrt.WriteHeader(http.StatusUnauthorized)
 				return
 			}
+
+			scope.Logger.Debug("access gramted")
+
 			next.ServeHTTP(wrt, req)
 		})
 	}

@@ -139,6 +139,8 @@ func AdmissionMiddleware(
 				return
 			}
 
+			scope.Logger.Debug("before checking headers", zap.String("headers", resource.GetHeaders()))
+
 			if len(resource.Headers) > 0 {
 				var reqHeaders []string
 				for _, resVal := range resource.Headers {
@@ -171,8 +173,9 @@ func AdmissionMiddleware(
 					accessForbidden(wrt, req)
 					return
 				} else {
-					lLog.Warn("access granted, correct headers",
+					lLog.Debug("access granted, correct headers",
 						zap.String("headers", resource.GetHeaders()))
+					scope.Logger.Debug("granted headers", zap.String("headers", resource.GetHeaders()))
 				}
 			}
 
