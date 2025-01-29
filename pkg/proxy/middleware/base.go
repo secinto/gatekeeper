@@ -345,6 +345,10 @@ func ProxyMiddleware(
 			if scope != nil {
 				req.URL.Path = scope.Path
 				req.URL.RawPath = scope.RawPath
+				logger.Debug("updating paths",
+					zap.String("path", req.URL.Path),
+					zap.String("rawPath", req.URL.RawPath),
+				)
 			}
 			if v := req.Header.Get("Host"); v != "" {
 				req.Host = v
