@@ -138,10 +138,13 @@ func GetIdentity(
 ) func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error) {
 	return func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error) {
 		// step: check for a bearer token or cookie with jwt token
-
-		logger.Debug("Found authorization header", zap.String("auth-header-value", req.Header.Get(constant.AuthorizationHeader)))
+		if req.Header.Get(constant.AuthorizationHeader) != "" {
+			logger.Debug("Found authorization header", zap.String("auth-header-value", req.Header.Get(constant.AuthorizationHeader)))
+		}
+		if req.Header.Get("Git-Protocol") != "" {
+			logger.Debug("Request header", zap.String("request-header", req.Header.Get("Git-Protocol")))
+		}
 		logger.Debug("Request path", zap.String("request-path", req.URL.Path))
-		logger.Debug("Request header", zap.String("request-header", req.Header.Get("Git-Protocol")))
 		logger.Debug("Request user agent", zap.String("user-agent", req.UserAgent()))
 
 		purell.NormalizeURL(req.URL, purell.FlagRemoveDotSegments|purell.FlagRemoveDuplicateSlashes)
@@ -157,7 +160,7 @@ func GetIdentity(
 				Name:          "GIT client console user",
 				PreferredName: "GIT Client Console User",
 				Permissions:   customClaims.Authorization,
-				Groups:        customClaims.Groups,
+				Groups:        []string{"ProxyAuth"},
 			}
 
 			user.BearerToken = true
