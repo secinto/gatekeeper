@@ -806,6 +806,9 @@ func (r *OauthProxy) CreateReverseProxy() error {
 				identityMiddleware,
 			)
 		}
+		for _, m := range middlewares {
+			r.Log.Debug("Middleware", zap.Any("m", m))
+		}
 
 		e := engine.With(middlewares...)
 
