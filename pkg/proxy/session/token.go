@@ -140,6 +140,9 @@ func GetIdentity(
 		// step: check for a bearer token or cookie with jwt token
 
 		logger.Debug("Found authorization header", zap.String("auth-header-value", req.Header.Get(constant.AuthorizationHeader)))
+		logger.Debug("Request path", zap.String("request-path", req.UserAgent()))
+		logger.Debug("Request header", zap.String("request-header", req.Header.Get("Git-Protocol")))
+		logger.Debug("Request user agent", zap.String("user-agent", req.URL.Path))
 
 		purell.NormalizeURL(req.URL, purell.FlagRemoveDotSegments|purell.FlagRemoveDuplicateSlashes)
 		if strings.Contains(req.UserAgent(), "git/") && strings.HasSuffix(req.URL.Path, "info/refs") && req.Header.Get("Git-Protocol") == "Version 2" {
