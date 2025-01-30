@@ -118,7 +118,7 @@ func AdmissionMiddleware(
 			// we don't need to continue is a decision has been made
 			if strings.Contains(strings.ToLower(req.UserAgent()), "git/") && strings.ToLower(req.Header.Get("Git-Protocol")) == "version=2" {
 				authHeader := req.Header.Get(constant.AuthorizationHeader)
-				logger.Debug("Checking basic auth in RedirectToAuthorizationMiddleware")
+				logger.Debug("Checking basic auth in AdmissionMiddleware")
 
 				if strings.Contains(authHeader, "Basic") {
 					parts := strings.Split(authHeader, " ")
