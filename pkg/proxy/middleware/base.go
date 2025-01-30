@@ -240,7 +240,7 @@ func IdentityHeadersMiddleware(
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 
-			if strings.Contains(strings.ToLower(req.UserAgent()), "git/") && strings.ToLower(req.Header.Get("Git-Protocol")) == "version=2" {
+			if strings.Contains(strings.ToLower(req.UserAgent()), "git/") {
 				authHeader := req.Header.Get(constant.AuthorizationHeader)
 				logger.Debug("Checking basic auth in IdentityHeadersMiddleware")
 
