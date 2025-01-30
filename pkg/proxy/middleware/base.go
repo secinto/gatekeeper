@@ -280,9 +280,10 @@ func IdentityHeadersMiddleware(
 					logger.Debug("Adding authentication header", zap.Any("Bearer", user.RawToken))
 					if user.BearerToken {
 						headers.Set(constant.AuthorizationHeader, "Bearer "+user.RawToken)
-					} else {
-						headers.Set(constant.AuthorizationHeader, "Basic "+user.RawToken)
 					}
+					/*else {
+						headers.Set(constant.AuthorizationHeader, "Basic "+user.RawToken)
+					}*/
 				}
 				// are we filtering out the cookies
 				if !enableAuthzCookies {
