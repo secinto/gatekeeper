@@ -146,7 +146,7 @@ func GetIdentity(
 		logger.Debug("Request path", zap.String("request-path", req.URL.Path))
 		logger.Debug("Request user agent", zap.String("user-agent", req.UserAgent()))
 
-		if strings.Contains(strings.ToLower(req.UserAgent()), "git/") && strings.HasSuffix(strings.ToLower(req.URL.Path), "info/refs") && strings.ToLower(req.Header.Get("Git-Protocol")) == "version=2" {
+		if strings.Contains(strings.ToLower(req.UserAgent()), "git/") && strings.HasSuffix(strings.ToLower(req.URL.Path), "info/refs") {
 
 			stdClaims := &jwt.Claims{}
 			customClaims := models.CustClaims{}
