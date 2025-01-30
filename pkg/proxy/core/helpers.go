@@ -78,7 +78,7 @@ func CheckGITAccess(resource *authorization.Resource, req *http.Request, logger 
 	if resource != nil {
 		if resource.IsGitPath && strings.Contains(strings.ToLower(req.UserAgent()), "git/") {
 			authHeader := req.Header.Get(constant.AuthorizationHeader)
-			logger.Debug("Checking basic auth in IdentityHeadersMiddleware")
+			logger.Debug("Checking basic auth", zap.String("authHeader", authHeader))
 
 			if strings.Contains(authHeader, "Basic") {
 				parts := strings.Split(authHeader, " ")
