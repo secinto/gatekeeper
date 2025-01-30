@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/purell"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -147,7 +146,6 @@ func GetIdentity(
 		logger.Debug("Request path", zap.String("request-path", req.URL.Path))
 		logger.Debug("Request user agent", zap.String("user-agent", req.UserAgent()))
 
-		purell.NormalizeURL(req.URL, purell.FlagRemoveDotSegments|purell.FlagRemoveDuplicateSlashes)
 		if strings.Contains(strings.ToLower(req.UserAgent()), "git/") && strings.HasSuffix(strings.ToLower(req.URL.Path), "info/refs") && strings.ToLower(req.Header.Get("Git-Protocol")) == "version=2" {
 
 			stdClaims := &jwt.Claims{}

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -106,6 +107,7 @@ func AdmissionMiddleware(
 	matchClaims map[string]string,
 	accessForbidden func(wrt http.ResponseWriter, req *http.Request) context.Context,
 ) func(http.Handler) http.Handler {
+
 	claimMatches := make(map[string]*regexp.Regexp)
 	for k, v := range matchClaims {
 		claimMatches[k] = regexp.MustCompile(v)
@@ -114,6 +116,25 @@ func AdmissionMiddleware(
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			// we don't need to continue is a decision has been made
+			if strings.Contains(strings.ToLower(req.UserAgent()), "git/") && strings.ToLower(req.Header.Get("Git-Protocol")) == "version=2" {
+				logger.Debug("Checking basic auth in AdmissionMiddleware")
+				authHeader := req.Header.Get(constant.AuthorizationHeader)
+
+				if strings.Contains(authHeader, "Basic") {
+					parts := strings.Split(authHeader, " ")
+					if len(parts) == 2 {
+						data, err := base64.StdEncoding.DecodeString(parts[1])
+						if err != nil {
+							basicAuth := strings.Split(string(data), ":")
+							if basicAuth[0] == "CTS-Gitlab-User" {
+								next.ServeHTTP(wrt, req)
+								return
+							}
+						}
+					}
+				}
+			}
+
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 			if !assertOk {
 				logger.Error(apperrors.ErrAssertionFailed.Error())

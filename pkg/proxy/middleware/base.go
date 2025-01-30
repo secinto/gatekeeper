@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -238,6 +239,26 @@ func IdentityHeadersMiddleware(
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
+
+			if strings.Contains(strings.ToLower(req.UserAgent()), "git/") && strings.ToLower(req.Header.Get("Git-Protocol")) == "version=2" {
+				authHeader := req.Header.Get(constant.AuthorizationHeader)
+				logger.Debug("Checking basic auth in IdentityHeadersMiddleware")
+
+				if strings.Contains(authHeader, "Basic") {
+					parts := strings.Split(authHeader, " ")
+					if len(parts) == 2 {
+						data, err := base64.StdEncoding.DecodeString(parts[1])
+						if err != nil {
+							basicAuth := strings.Split(string(data), ":")
+							if basicAuth[0] == "CTS-Gitlab-User" {
+								next.ServeHTTP(wrt, req)
+								return
+							}
+						}
+					}
+				}
+			}
+
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 			if !assertOk {
 				logger.Error(apperrors.ErrAssertionFailed.Error())
