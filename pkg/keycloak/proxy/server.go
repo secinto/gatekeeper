@@ -438,6 +438,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		newOAuth2Config,
 		r.Store,
 		r.Config.AccessTokenDuration,
+		nil,
 	)
 
 	loginHand := loginHandler(
@@ -558,6 +559,7 @@ func (r *OauthProxy) CreateReverseProxy() error {
 		r.Config.OAuthURI,
 		r.Config.AllowedQueryParams,
 		r.Config.DefaultAllowedQueryParams,
+		nil,
 	)
 	noredToAuthMiddleware := gmiddleware.NoRedirectToAuthorizationMiddleware(r.Log)
 
@@ -685,6 +687,18 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			zap.String("resource", res.String()),
 		)
 
+		redToAuthMiddleware = gmiddleware.RedirectToAuthorizationMiddleware(
+			r.Log,
+			r.Cm,
+			r.Config.SkipTokenVerification,
+			r.Config.NoProxy,
+			r.Config.BaseURI,
+			r.Config.OAuthURI,
+			r.Config.AllowedQueryParams,
+			r.Config.DefaultAllowedQueryParams,
+			res,
+		)
+
 		authFailMiddleware := redToAuthMiddleware
 		if res.NoRedirect || r.Config.NoRedirects {
 			authFailMiddleware = noredToAuthMiddleware
@@ -706,6 +720,32 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			r.Config.EnableTokenHeader,
 			r.Config.EnableAuthorizationHeader,
 			r.Config.EnableAuthorizationCookies,
+			res,
+		)
+
+		authMid = gmiddleware.AuthenticationMiddleware(
+			r.Log,
+			r.Config.CookieAccessName,
+			r.Config.CookieRefreshName,
+			getIdentity,
+			r.IdpClient.RestyClient().GetClient(),
+			r.Config.EnableIDPSessionCheck,
+			r.Provider,
+			r.Config.SkipTokenVerification,
+			r.Config.ClientID,
+			r.Config.SkipAccessTokenClientIDCheck,
+			r.Config.SkipAccessTokenIssuerCheck,
+			accessForbidden,
+			r.Config.EnableRefreshTokens,
+			r.Config.RedirectionURL,
+			r.Cm,
+			r.Config.EnableEncryptedToken,
+			r.Config.ForceEncryptedCookie,
+			r.Config.EncryptionKey,
+			newOAuth2Config,
+			r.Store,
+			r.Config.AccessTokenDuration,
+			res,
 		)
 
 		middlewares := []func(http.Handler) http.Handler{

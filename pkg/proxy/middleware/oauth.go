@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/gogatekeeper/gatekeeper/pkg/authorization"
 	"net/http"
 	"strings"
 	"time"
 
-	"encoding/base64"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
@@ -50,32 +50,14 @@ func AuthenticationMiddleware(
 	newOAuth2Config func(redirectionURL string) *oauth2.Config,
 	store storage.Storage,
 	accessTokenDuration time.Duration,
+	resource *authorization.Resource,
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			logger.Debug("Before checking scope")
 
-			if strings.Contains(strings.ToLower(req.UserAgent()), "git/") {
-				authHeader := req.Header.Get(constant.AuthorizationHeader)
-				logger.Debug("Checking basic auth in AuthenticationMiddleware")
-
-				if strings.Contains(authHeader, "Basic") {
-					parts := strings.Split(authHeader, " ")
-					logger.Debug("Auth header", zap.String("oart 1", parts[0]), zap.String("oart 2", parts[1]))
-
-					if len(parts) == 2 {
-						data, err := base64.StdEncoding.DecodeString(parts[1])
-						logger.Debug("Auth header decoded", zap.String("decoded", string(data)))
-						if err == nil {
-							basicAuth := strings.Split(string(data), ":")
-							logger.Debug("Auth header user", zap.String("user", basicAuth[0]))
-							if basicAuth[0] == "CTS-Gitlab-User" {
-								next.ServeHTTP(wrt, req)
-								return
-							}
-						}
-					}
-				}
+			if core.CheckGITAccess(resource, req, logger) {
+				next.ServeHTTP(wrt, req)
 			}
 
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
@@ -362,31 +344,13 @@ func RedirectToAuthorizationMiddleware(
 	oAuthURI string,
 	allowedQueryParams map[string]string,
 	defaultAllowedQueryParams map[string]string,
+	resource *authorization.Resource,
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 
-			if strings.Contains(strings.ToLower(req.UserAgent()), "git/") {
-				authHeader := req.Header.Get(constant.AuthorizationHeader)
-				logger.Debug("Checking basic auth in RedirectToAuthorizationMiddleware")
-
-				if strings.Contains(authHeader, "Basic") {
-					parts := strings.Split(authHeader, " ")
-					logger.Debug("Auth header", zap.String("oart 1", parts[0]), zap.String("oart 2", parts[1]))
-
-					if len(parts) == 2 {
-						data, err := base64.StdEncoding.DecodeString(parts[1])
-						logger.Debug("Auth header decoded", zap.String("decoded", string(data)))
-						if err == nil {
-							basicAuth := strings.Split(string(data), ":")
-							logger.Debug("Auth header user", zap.String("user", basicAuth[0]))
-							if basicAuth[0] == "CTS-Gitlab-User" {
-								next.ServeHTTP(wrt, req)
-								return
-							}
-						}
-					}
-				}
+			if core.CheckGITAccess(resource, req, logger) {
+				next.ServeHTTP(wrt, req)
 			}
 
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)

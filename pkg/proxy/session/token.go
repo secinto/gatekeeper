@@ -137,17 +137,9 @@ func GetIdentity(
 ) func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error) {
 	return func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error) {
 		// step: check for a bearer token or cookie with jwt token
-		if req.Header.Get(constant.AuthorizationHeader) != "" {
-			logger.Debug("Found authorization header", zap.String("auth-header-value", req.Header.Get(constant.AuthorizationHeader)))
-		}
-		if req.Header.Get("Git-Protocol") != "" {
-			logger.Debug("Request header", zap.String("request-header", req.Header.Get("Git-Protocol")))
-		}
-		logger.Debug("Request path", zap.String("request-path", req.URL.Path))
-		logger.Debug("Request user agent", zap.String("user-agent", req.UserAgent()))
 
-		if strings.Contains(strings.ToLower(req.UserAgent()), "git/") && strings.HasSuffix(strings.ToLower(req.URL.Path), "info/refs") {
-
+		if useIdentityFromBasicAuth && strings.Contains(strings.ToLower(req.UserAgent()), "git/") && strings.HasSuffix(strings.ToLower(req.URL.Path), "info/refs") {
+			logger.Debug("Adding false user for GIT request!", zap.String("X-Forwaded-For", req.Header.Get("X-Forwarded-For")))
 			stdClaims := &jwt.Claims{}
 			customClaims := models.CustClaims{}
 			user := &models.UserContext{

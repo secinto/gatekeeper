@@ -2,8 +2,8 @@ package middleware
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
+	"github.com/gogatekeeper/gatekeeper/pkg/proxy/core"
 	"net/http"
 	"regexp"
 	"strings"
@@ -116,27 +116,8 @@ func AdmissionMiddleware(
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
 			// we don't need to continue is a decision has been made
-			if strings.Contains(strings.ToLower(req.UserAgent()), "git/") {
-				authHeader := req.Header.Get(constant.AuthorizationHeader)
-				logger.Debug("Checking basic auth in AdmissionMiddleware")
-
-				if strings.Contains(authHeader, "Basic") {
-					parts := strings.Split(authHeader, " ")
-					logger.Debug("Auth header", zap.String("oart 1", parts[0]), zap.String("oart 2", parts[1]))
-
-					if len(parts) == 2 {
-						data, err := base64.StdEncoding.DecodeString(parts[1])
-						logger.Debug("Auth header decoded", zap.String("decoded", string(data)))
-						if err == nil {
-							basicAuth := strings.Split(string(data), ":")
-							logger.Debug("Auth header user", zap.String("user", basicAuth[0]))
-							if basicAuth[0] == "CTS-Gitlab-User" {
-								next.ServeHTTP(wrt, req)
-								return
-							}
-						}
-					}
-				}
+			if core.CheckGITAccess(resource, req, logger) {
+				next.ServeHTTP(wrt, req)
 			}
 
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
