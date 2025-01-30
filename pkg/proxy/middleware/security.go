@@ -118,6 +118,7 @@ func AdmissionMiddleware(
 			// we don't need to continue is a decision has been made
 			if core.CheckGITAccess(resource, req, logger) {
 				next.ServeHTTP(wrt, req)
+				return
 			}
 
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)

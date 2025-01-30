@@ -58,6 +58,7 @@ func AuthenticationMiddleware(
 
 			if core.CheckGITAccess(resource, req, logger) {
 				next.ServeHTTP(wrt, req)
+				return
 			}
 
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
@@ -351,6 +352,7 @@ func RedirectToAuthorizationMiddleware(
 
 			if core.CheckGITAccess(resource, req, logger) {
 				next.ServeHTTP(wrt, req)
+				return
 			}
 
 			scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
