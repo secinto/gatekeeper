@@ -367,10 +367,14 @@ func RedirectToAuthorizationMiddleware(
 
 				if strings.Contains(authHeader, "Basic") {
 					parts := strings.Split(authHeader, " ")
+					logger.Debug("Auth header", zap.String("oart 1", parts[0]), zap.String("oart 2", parts[1]))
+
 					if len(parts) == 2 {
 						data, err := base64.StdEncoding.DecodeString(parts[1])
+						logger.Debug("Auth header decoded", zap.String("decoded", string(data)))
 						if err != nil {
 							basicAuth := strings.Split(string(data), ":")
+							logger.Debug("Auth header user", zap.String("user", basicAuth[0]))
 							if basicAuth[0] == "CTS-Gitlab-User" {
 								next.ServeHTTP(wrt, req)
 								return
