@@ -76,7 +76,7 @@ func RevokeProxy(logger *zap.Logger, req *http.Request) context.Context {
 
 func CheckGITAccess(resource *authorization.Resource, req *http.Request, logger *zap.Logger) bool {
 	if resource != nil {
-		if resource.IsGitPath && strings.Contains(strings.ToLower(req.UserAgent()), "git/") {
+		if resource.IsGitPath && (strings.Contains(strings.ToLower(req.UserAgent()), "git/") || strings.Contains(strings.ToLower(req.UserAgent()), "gitlab-runner")) {
 			authHeader := req.Header.Get(constant.AuthorizationHeader)
 			logger.Debug("Checking basic auth", zap.String("authHeader", authHeader))
 
