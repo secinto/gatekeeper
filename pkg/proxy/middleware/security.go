@@ -146,7 +146,7 @@ func AdmissionMiddleware(
 				return
 			}
 
-			scope.Logger.Debug("before checking headers", zap.String("headers", resource.GetHeaders()))
+			//scope.Logger.Debug("before checking headers", zap.String("headers", resource.GetHeaders()))
 
 			if len(resource.Headers) > 0 {
 				var reqHeaders []string

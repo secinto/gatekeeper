@@ -118,24 +118,25 @@ func LoggingMiddleware(
 			}
 
 			next.ServeHTTP(resp, req)
-
-			if req.URL.Path == req.URL.RawPath || req.URL.RawPath == "" {
-				scope.Logger.Info("client request",
-					zap.Duration("latency", time.Since(start)),
-					zap.Int("status", resp.Status()),
-					zap.Int("bytes", resp.BytesWritten()),
-					zap.String("remote_addr", req.RemoteAddr),
-					zap.String("method", req.Method),
-					zap.String("path", req.URL.Path))
-			} else {
-				scope.Logger.Info("client request",
-					zap.Duration("latency", time.Since(start)),
-					zap.Int("status", resp.Status()),
-					zap.Int("bytes", resp.BytesWritten()),
-					zap.String("remote_addr", req.RemoteAddr),
-					zap.String("method", req.Method),
-					zap.String("path", req.URL.Path),
-					zap.String("raw path", req.URL.RawPath))
+			if !strings.Contains(req.URL.Path, "api") {
+				if req.URL.Path == req.URL.RawPath || req.URL.RawPath == "" {
+					scope.Logger.Info("client request",
+						zap.Duration("latency", time.Since(start)),
+						zap.Int("status", resp.Status()),
+						zap.Int("bytes", resp.BytesWritten()),
+						zap.String("remote_addr", req.RemoteAddr),
+						zap.String("method", req.Method),
+						zap.String("path", req.URL.Path))
+				} else {
+					scope.Logger.Info("client request",
+						zap.Duration("latency", time.Since(start)),
+						zap.Int("status", resp.Status()),
+						zap.Int("bytes", resp.BytesWritten()),
+						zap.String("remote_addr", req.RemoteAddr),
+						zap.String("method", req.Method),
+						zap.String("path", req.URL.Path),
+						zap.String("raw path", req.URL.RawPath))
+				}
 			}
 		})
 	}

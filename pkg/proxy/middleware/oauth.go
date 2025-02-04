@@ -54,8 +54,6 @@ func AuthenticationMiddleware(
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
-			logger.Debug("Before checking scope")
-
 			if core.CheckGITAccess(resource, req, logger) {
 				next.ServeHTTP(wrt, req)
 				return

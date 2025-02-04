@@ -952,7 +952,6 @@ func (r *OauthProxy) createForwardingProxy() error {
 
 				latency := time.Since(start)
 				metrics.LatencyMetric.Observe(latency.Seconds())
-
 				r.Log.Info("client request",
 					zap.String("method", resp.Request.Method),
 					zap.String("path", resp.Request.URL.Path),
