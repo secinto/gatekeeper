@@ -317,8 +317,6 @@ func ProxyMiddleware(
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(wrt http.ResponseWriter, req *http.Request) {
-			logger.Debug("before serving next in proxy middleware")
-
 			next.ServeHTTP(wrt, req)
 
 			// @step: retrieve the request scope
@@ -362,10 +360,12 @@ func ProxyMiddleware(
 			if scope != nil {
 				req.URL.Path = scope.Path
 				req.URL.RawPath = scope.RawPath
-				logger.Debug("updating paths",
-					zap.String("path", req.URL.Path),
-					zap.String("rawPath", req.URL.RawPath),
-				)
+				if !strings.Contains(req.URL.Path, "api") {
+					logger.Debug("updating paths",
+						zap.String("path", req.URL.Path),
+						zap.String("rawPath", req.URL.RawPath),
+					)
+				}
 			}
 			if v := req.Header.Get("Host"); v != "" {
 				req.Host = v
@@ -387,13 +387,15 @@ func ProxyMiddleware(
 				}
 				return
 			}
-			logger.Debug("forwarding request to upstream", zap.String("URL", req.URL.Path))
-			logger.Debug("Request: ")
-			for key, val := range req.Header {
-				// Logic using key
-				// And val if you need it
-				for _, value := range val {
-					logger.Debug(key + ": " + value)
+			if !strings.Contains(req.URL.Path, "api") {
+				logger.Debug("forwarding request to upstream", zap.String("URL", req.URL.Path))
+				logger.Debug("Request: ")
+				for key, val := range req.Header {
+					// Logic using key
+					// And val if you need it
+					for _, value := range val {
+						logger.Debug(key + ": " + value)
+					}
 				}
 			}
 			upstream.ServeHTTP(wrt, req)

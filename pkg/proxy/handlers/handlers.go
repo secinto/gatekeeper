@@ -22,6 +22,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-jose/go-jose/v4/jwt"
@@ -42,7 +43,9 @@ func NotSoEmptyHandler(
 	logger *zap.Logger,
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(wrt http.ResponseWriter, req *http.Request) {
-		logger.Debug("Inside empty handler", zap.String("method", req.Method), zap.String("url", req.URL.String()))
+		if !strings.Contains(req.URL.Path, "api") {
+			logger.Debug("Inside not so empty handler", zap.String("method", req.Method), zap.String("url", req.URL.String()))
+		}
 	}
 }
 

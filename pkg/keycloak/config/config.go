@@ -82,7 +82,7 @@ type Config struct {
 	CookiePKCEName                  string                    `env:"COOKIE_PKCE_NAME" json:"cookie-pkce-name" usage:"name of the cookie used to hold PKCE code verifier" yaml:"cookie-pkce-name"`
 	CookieUMAName                   string                    `env:"COOKIE_UMA_NAME" json:"cookie-uma-name" usage:"name of the cookie used to hold the UMA RPT token" yaml:"cookie-uma-name"`
 	SameSiteCookie                  string                    `env:"SAME_SITE_COOKIE" json:"same-site-cookie" usage:"enforces cookies to be send only to same site requests according to the policy (can be Strict|Lax|None)" yaml:"same-site-cookie"`
-	TLSCertificate                  string                    `env:"TLS_CERTIFICATE" json:"tls-cert" usage:"path to ths TLS certificate" yaml:"tls-cert"`
+	TLSCertificate                  string                    `env:"TLS_CERTIFICATE" json:"tls-cert" usage:"path to the TLS certificate" yaml:"tls-cert"`
 	TLSPrivateKey                   string                    `env:"TLS_PRIVATE_KEY" json:"tls-private-key" usage:"path to the private key for TLS" yaml:"tls-private-key"`
 	TLSCaCertificate                string                    `env:"TLS_CA_CERTIFICATE" json:"tls-ca-certificate" usage:"path to the ca certificate used for signing requests" yaml:"tls-ca-certificate"`
 	TLSCaPrivateKey                 string                    `env:"TLS_CA_PRIVATE_KEY" json:"tls-ca-key" usage:"path the ca private key, used by the forward signing proxy" yaml:"tls-ca-key"`
