@@ -132,7 +132,7 @@ func (r *Resource) Parse(resource string) (*Resource, error) {
 			}
 			r.IsGitPath = value
 		case "git-user-to-expect":
-			r.GitUserToExpect = strings.Split(strings.ToLower(keyPair[1]), ",")
+			r.GitUserToExpect = strings.Split(keyPair[1], ",")
 			if len(r.GitUserToExpect) != 0 {
 				return nil, errors.New("empty git user not allowed")
 			}

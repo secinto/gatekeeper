@@ -88,7 +88,7 @@ func CheckGITAccess(resource *authorization.Resource, req *http.Request, logger 
 					if err == nil {
 						basicAuth := strings.Split(string(data), ":")
 						for _, user := range resource.GitUserToExpect {
-							if user == basicAuth[0] {
+							if strings.Trim(user, " ") == strings.Trim(basicAuth[0], " ") {
 								return true
 							}
 						}
