@@ -87,17 +87,12 @@ func CheckGITAccess(resource *authorization.Resource, req *http.Request, logger 
 					logger.Debug("Auth header decoded", zap.String("header", string(data)))
 					if err == nil {
 						basicAuth := strings.Split(string(data), ":")
-						if resource.GitUserToExpect == basicAuth[0] {
-							return true
-						}
-						/*
-							for _, user := range resource.GitUserToExpect {
-								logger.Debug("Checking user", zap.String("user", user), zap.String("authHeader", basicAuth[0]))
-								if strings.Trim(user, " ") == strings.Trim(basicAuth[0], " ") {
-									return true
-								}
+						for _, user := range resource.GitUserToExpect {
+							logger.Debug("Checking user", zap.String("user", user), zap.String("authHeader", basicAuth[0]))
+							if strings.Trim(user, " ") == strings.Trim(basicAuth[0], " ") {
+								return true
 							}
-						*/
+						}
 					}
 				}
 			}

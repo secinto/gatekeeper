@@ -48,7 +48,7 @@ type Resource struct {
 	// If true, the secured path has a Gitlab instance in the upstream
 	IsGitPath bool `json:"is-git-path" yaml:"is-git-path"`
 	// If basic auth is provided for GIT client authentication, which user is allowed
-	GitUserToExpect string `json:"git-user-to-expect" yaml:"git-user-to-expect"`
+	GitUserToExpect []string `json:"git-user-to-expect" yaml:"git-user-to-expect"`
 }
 
 func NewResource() *Resource {
@@ -132,10 +132,10 @@ func (r *Resource) Parse(resource string) (*Resource, error) {
 			}
 			r.IsGitPath = value
 		case "git-user-to-expect":
-			r.GitUserToExpect = strings.Trim(keyPair[1], " ")
-			//if len(r.GitUserToExpect) != 0 {
-			//	return nil, errors.New("empty git user not allowed")
-			//}
+			r.GitUserToExpect = strings.Split(keyPair[1], ",")
+			if len(r.GitUserToExpect) != 0 {
+				return nil, errors.New("empty git user not allowed")
+			}
 		case "no-redirect":
 			value, err := strconv.ParseBool(keyPair[1])
 			if err != nil {
