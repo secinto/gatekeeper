@@ -138,7 +138,7 @@ func GetIdentity(
 	return func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error) {
 		// step: check for a bearer token or cookie with jwt token
 
-		if useIdentityFromBasicAuth && strings.Contains(strings.ToLower(req.UserAgent()), "git/") && strings.HasSuffix(strings.ToLower(req.URL.Path), "info/refs") {
+		if useIdentityFromBasicAuth && (strings.Contains(strings.ToLower(req.UserAgent()), "git/") || strings.Contains(strings.ToLower(req.UserAgent()), "gitlab-runner")) && strings.HasSuffix(strings.ToLower(req.URL.Path), "info/refs") {
 			logger.Debug("Adding false user for GIT request!", zap.String("X-Forwaded-For", req.Header.Get("X-Forwarded-For")))
 			stdClaims := &jwt.Claims{}
 			customClaims := models.CustClaims{}
