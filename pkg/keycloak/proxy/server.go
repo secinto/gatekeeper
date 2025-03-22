@@ -800,15 +800,32 @@ func (r *OauthProxy) CreateReverseProxy() error {
 			)
 		}
 
-		e := engine.With(middlewares...)
+		eProt := engine.With(middlewares...)
+		headerRouterMiddleware := gmiddleware.RouteHeaders().
+			SetMatchingType(gmiddleware.RouteHeadersContainsMatcher).
+			Route(
+				constant.AuthorizationHeader,
+				constant.AuthorizationType,
+				eProt.Middlewares().Handler,
+			).
+			Route(
+				"Cookie",
+				r.Config.CookieAccessName+"=",
+				eProt.Middlewares().Handler,
+			).
+			Handler
+
+		p := engine.With(headerRouterMiddleware)
 
 		for _, method := range res.Methods {
-			if !res.WhiteListed {
-				e.MethodFunc(method, res.URL, handlers.EmptyHandler)
-				continue
+			switch {
+			case res.WhiteListedAnon:
+				p.MethodFunc(method, res.URL, handlers.EmptyHandler)
+			case res.WhiteListed:
+				engine.MethodFunc(method, res.URL, handlers.EmptyHandler)
+			default:
+				eProt.MethodFunc(method, res.URL, handlers.EmptyHandler)
 			}
-
-			engine.MethodFunc(method, res.URL, handlers.EmptyHandler)
 		}
 	}
 
