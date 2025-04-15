@@ -52,7 +52,7 @@ func EntrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 			resp := middleware.NewWrapResponseWriter(wrt, 1)
 			start := time.Now()
 
-			logger.Debug("Incoming request", zap.String("incoming request-path", req.URL.Path))
+			logger.Debug("Incoming request", zap.String("incoming request-path", req.URL.Path), zap.String("from host", req.Host), zap.String("for host", req.URL.Host))
 
 			// All the processing, including forwarding the request upstream and getting the response,
 			// happens here in this chain.
@@ -123,19 +123,23 @@ func LoggingMiddleware(
 					scope.Logger.Info("client request",
 						zap.Duration("latency", time.Since(start)),
 						zap.Int("status", resp.Status()),
-						zap.Int("bytes", resp.BytesWritten()),
+						//zap.Int("bytes", resp.BytesWritten()),
 						zap.String("remote_addr", req.RemoteAddr),
 						zap.String("method", req.Method),
-						zap.String("path", req.URL.Path))
+						zap.String("path", req.URL.Path),
+						zap.String("host", req.Host),
+						zap.String("remote host", req.URL.Host))
 				} else {
 					scope.Logger.Info("client request",
 						zap.Duration("latency", time.Since(start)),
 						zap.Int("status", resp.Status()),
-						zap.Int("bytes", resp.BytesWritten()),
+						//zap.Int("bytes", resp.BytesWritten()),
 						zap.String("remote_addr", req.RemoteAddr),
 						zap.String("method", req.Method),
 						zap.String("path", req.URL.Path),
-						zap.String("raw path", req.URL.RawPath))
+						zap.String("raw path", req.URL.RawPath),
+						zap.String("host", req.Host),
+						zap.String("remote host", req.URL.Host))
 				}
 			}
 		})
@@ -389,15 +393,15 @@ func ProxyMiddleware(
 				return
 			}
 			if !strings.Contains(req.URL.Path, "api") {
-				logger.Debug("forwarding request to upstream", zap.String("URL", req.URL.Path))
-				logger.Debug("Request: ")
+				logger.Debug("forwarding request to upstream", zap.String("URL", req.URL.Path), zap.String("Host", req.Host))
+				/*logger.Debug("Request: ")
 				for key, val := range req.Header {
 					// Logic using key
 					// And val if you need it
 					for _, value := range val {
 						logger.Debug(key + ": " + value)
 					}
-				}
+				}*/
 			}
 			upstream.ServeHTTP(wrt, req)
 		})

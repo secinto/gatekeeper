@@ -956,7 +956,7 @@ func (r *OauthProxy) createForwardingProxy() error {
 					zap.String("method", resp.Request.Method),
 					zap.String("path", resp.Request.URL.Path),
 					zap.Int("status", resp.StatusCode),
-					zap.Int64("bytes", resp.ContentLength),
+					//zap.Int64("bytes", resp.ContentLength),
 					zap.String("host", resp.Request.Host),
 					zap.String("path", resp.Request.URL.Path),
 					zap.String("latency", latency.String()))
