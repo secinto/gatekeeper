@@ -124,7 +124,7 @@ func LoggingMiddleware(
 						zap.Duration("latency", time.Since(start)),
 						zap.Int("status", resp.Status()),
 						//zap.Int("bytes", resp.BytesWritten()),
-						zap.String("remote_addr", req.RemoteAddr),
+						//zap.String("remote_addr", req.RemoteAddr),
 						zap.String("method", req.Method),
 						zap.String("path", req.URL.Path),
 						zap.String("host", req.Host),
@@ -134,7 +134,7 @@ func LoggingMiddleware(
 						zap.Duration("latency", time.Since(start)),
 						zap.Int("status", resp.Status()),
 						//zap.Int("bytes", resp.BytesWritten()),
-						zap.String("remote_addr", req.RemoteAddr),
+						//zap.String("remote_addr", req.RemoteAddr),
 						zap.String("method", req.Method),
 						zap.String("path", req.URL.Path),
 						zap.String("raw path", req.URL.RawPath),
@@ -383,7 +383,7 @@ func ProxyMiddleware(
 				clientIP := utils.RealIP(req)
 				logger.Debug("upgrading the connnection",
 					zap.String("client_ip", clientIP),
-					zap.String("remote_addr", req.RemoteAddr),
+					//zap.String("remote_addr", req.RemoteAddr),
 				)
 				if err := utils.TryUpdateConnection(req, wrt, endpoint); err != nil {
 					logger.Error("failed to upgrade connection", zap.Error(err))
