@@ -52,7 +52,7 @@ func EntrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 			resp := middleware.NewWrapResponseWriter(wrt, 1)
 			start := time.Now()
 
-			logger.Info("Incoming request", zap.String("incoming request-path", req.URL.Path), zap.String("from host", req.Host), zap.String("for host", req.URL.Host))
+			logger.Info("Incoming request", zap.String("incoming request-path", req.URL.Path), zap.String("from host", req.Host), zap.String("for host", req.URL.String()))
 
 			// All the processing, including forwarding the request upstream and getting the response,
 			// happens here in this chain.
