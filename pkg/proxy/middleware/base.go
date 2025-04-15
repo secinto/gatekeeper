@@ -52,7 +52,7 @@ func EntrypointMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 			resp := middleware.NewWrapResponseWriter(wrt, 1)
 			start := time.Now()
 
-			logger.Debug("Incoming request", zap.String("incoming request-path", req.URL.Path), zap.String("from host", req.Host), zap.String("for host", req.URL.Host))
+			logger.Info("Incoming request", zap.String("incoming request-path", req.URL.Path), zap.String("from host", req.Host), zap.String("for host", req.URL.Host))
 
 			// All the processing, including forwarding the request upstream and getting the response,
 			// happens here in this chain.
@@ -128,7 +128,7 @@ func LoggingMiddleware(
 						zap.String("method", req.Method),
 						zap.String("path", req.URL.Path),
 						zap.String("host", req.Host),
-						zap.String("remote host", req.URL.Host))
+						zap.String("url", req.URL.String()))
 				} else {
 					scope.Logger.Info("client request",
 						zap.Duration("latency", time.Since(start)),
@@ -139,7 +139,7 @@ func LoggingMiddleware(
 						zap.String("path", req.URL.Path),
 						zap.String("raw path", req.URL.RawPath),
 						zap.String("host", req.Host),
-						zap.String("remote host", req.URL.Host))
+						zap.String("url", req.URL.String()))
 				}
 			}
 		})
