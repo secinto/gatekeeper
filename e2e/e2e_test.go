@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/tls"
 	"math/big"
 	"net"
 	"net/http"
@@ -25,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo/v2" //nolint:revive //we want to use it for ginkgo
 	. "github.com/onsi/gomega"    //nolint:revive //we want to use it for gomega
 	"github.com/pquerna/otp/totp"
+	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -43,8 +45,9 @@ const (
 	//nolint:gosec
 	loaTestClientSecret     = "4z9PoOooXNFmSCPZx0xHXaUxX4eYGFO0"
 	timeout                 = time.Second * 300
-	idpURI                  = "http://localhost:8081"
-	localURI                = "http://localhost:"
+	idpURI                  = "https://localhost:8443"
+	localURI                = "https://localhost:"
+	httpLocalURI            = "http://localhost:"
 	logoutURI               = "/oauth" + constant.LogoutURL
 	registerURI             = "/oauth" + constant.RegistrationURL
 	allInterfaces           = "0.0.0.0:"
@@ -71,6 +74,50 @@ const (
 	pkceCookieName        = "TESTPKCECOOKIE"
 	umaCookieName         = "TESTUMACOOKIE"
 	idpRealmURI           = idpURI + "/realms/" + testRealm
+	//nolint:gosec
+	fakePrivateKey = `
+-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEIA0wan+Hp0gsbyyZnN/Q8PzaQirGJYBA9g0UT9WIbnl/oAoGCCqGSM49
+AwEHoUQDQgAEzYuh8kValY9VN7IGdf1o3u7nt57SFCkpgTx7Dt6s/5FxLBih7Z8v
+/6xWYMy1DZ/ftmKhzLdWGBw3/KFTZFW/uQ==
+-----END EC PRIVATE KEY-----
+`
+
+	fakeCert = `
+-----BEGIN CERTIFICATE-----
+MIIChzCCAi6gAwIBAgIUdNo4UjE80CwFpuB9OabwJfdQx20wCgYIKoZIzj0EAwIw
+eDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNVBAcTDVNh
+biBGcmFuY2lzY28xHzAdBgNVBAoTFkludGVybmV0IFdpZGdldHMsIEluYy4xDDAK
+BgNVBAsTA1dXVzENMAsGA1UEAxMEdGVzdDAeFw0yNTA1MDcyMTUwMDBaFw0zNTA1
+MDUyMTUwMDBaMFUxCzAJBgNVBAYTAlVTMQ4wDAYDVQQIEwVUZXhhczEPMA0GA1UE
+BxMGRGFsbGFzMRcwFQYDVQQKEw5NeSBDZXJ0aWZpY2F0ZTEMMAoGA1UECxMDV1dX
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEzYuh8kValY9VN7IGdf1o3u7nt57S
+FCkpgTx7Dt6s/5FxLBih7Z8v/6xWYMy1DZ/ftmKhzLdWGBw3/KFTZFW/uaOBuDCB
+tTAOBgNVHQ8BAf8EBAMCBaAwEwYDVR0lBAwwCgYIKwYBBQUHAwEwDAYDVR0TAQH/
+BAIwADAdBgNVHQ4EFgQUzzldhD3SVHdF5+pfWKNV7d725sYwHwYDVR0jBBgwFoAU
+bpJPTaf4qmNj18IVY2FOVtI78ZkwQAYDVR0RBDkwN4IJbG9jYWxob3N0hwR/AAAB
+hhFodHRwczovL2xvY2FsaG9zdIYRaHR0cHM6Ly8xMjcuMC4wLjEwCgYIKoZIzj0E
+AwIDRwAwRAIgE+uhmpQTVryDefftx7mwqJWEDB+UcVchBCj5HEKDq9ACIA/DVtH5
+sehNk++XHkJ51nMKkNNyMMcTnuut3DHL8JrB
+-----END CERTIFICATE-----
+`
+
+	fakeCA = `
+-----BEGIN CERTIFICATE-----
+MIICNTCCAdqgAwIBAgIUVJeIpDwfTA7KEvk0D67mbLKebN0wCgYIKoZIzj0EAwIw
+eDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCkNhbGlmb3JuaWExFjAUBgNVBAcTDVNh
+biBGcmFuY2lzY28xHzAdBgNVBAoTFkludGVybmV0IFdpZGdldHMsIEluYy4xDDAK
+BgNVBAsTA1dXVzENMAsGA1UEAxMEdGVzdDAeFw0yNTA1MDcyMTUwMDBaFw0zNTA1
+MDUyMTUwMDBaMHgxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYw
+FAYDVQQHEw1TYW4gRnJhbmNpc2NvMR8wHQYDVQQKExZJbnRlcm5ldCBXaWRnZXRz
+LCBJbmMuMQwwCgYDVQQLEwNXV1cxDTALBgNVBAMTBHRlc3QwWTATBgcqhkjOPQIB
+BggqhkjOPQMBBwNCAAShk6FOk8ELcojDxVTk/nS2ptKHxtfUPOBVVnxDPgTsSbgU
+i76r16K/GMbQxZ9uLxThdyBE/+zhkEsWZsS7u8roo0IwQDAOBgNVHQ8BAf8EBAMC
+AQYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUbpJPTaf4qmNj18IVY2FOVtI7
+8ZkwCgYIKoZIzj0EAwIDSQAwRgIhAPvq07H/TSu1O6+v4rQR2fBnAoDsGive2scI
+OXGLqAOiAiEA6lFfgFB7AhvaYy1VL5vN10FGBvqg2VWBWdAyIcFlP7k=
+-----END CERTIFICATE-----
+`
 )
 
 func generateRandomPort() (string, error) {
@@ -187,7 +234,8 @@ var _ = Describe("NoRedirects Simple login/logout", func() {
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
-			"--openid-provider-timeout=120s",
+			"--openid-provider-timeout=300s",
+			"--skip-openid-provider-tls-verify=true",
 			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + testClient,
 			"--client-secret=" + testClientSecret,
@@ -199,6 +247,9 @@ var _ = Describe("NoRedirects Simple login/logout", func() {
 			"--openid-provider-retry-count=30",
 			"--enable-encrypted-token=false",
 			"--enable-pkce=false",
+			"--tls-cert=" + tlsCertificate,
+			"--tls-private-key=" + tlsPrivateKey,
+			"--tls-ca-certificate=" + tlsCaCertificate,
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -217,16 +268,27 @@ var _ = Describe("NoRedirects Simple login/logout", func() {
 					TokenURL:     idpRealmURI + constant.IdpTokenURI,
 				}
 
-				respToken, err := conf.Token(ctx)
+				rClient := resty.New()
+				hClient := rClient.SetTLSClientConfig(
+					&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13}).GetClient()
+				oidcLibCtx := context.WithValue(ctx, oauth2.HTTPClient, hClient)
+
+				respToken, err := conf.Token(oidcLibCtx)
 				Expect(err).NotTo(HaveOccurred())
 
-				request := resty.New().SetRedirectPolicy(
+				rClient = resty.New()
+				rClient.SetTLSClientConfig(&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13})
+
+				request := rClient.SetRedirectPolicy(
 					resty.NoRedirectPolicy()).R().SetAuthToken(respToken.AccessToken)
 				resp, err := request.Get(proxyAddress)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
 
-				request = resty.New().R().SetAuthToken(respToken.AccessToken)
+				rClient = resty.New()
+				rClient.SetTLSClientConfig(&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13})
+
+				request = rClient.R().SetAuthToken(respToken.AccessToken)
 				resp, err = request.Get(proxyAddress + logoutURI)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.StatusCode()).To(Equal(http.StatusOK))
@@ -249,7 +311,8 @@ var _ = Describe("Code Flow login/logout", func() {
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
-			"--openid-provider-timeout=120s",
+			"--openid-provider-timeout=300s",
+			"--skip-openid-provider-tls-verify=true",
 			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + testClient,
 			"--client-secret=" + testClientSecret,
@@ -268,6 +331,9 @@ var _ = Describe("Code Flow login/logout", func() {
 			"--enable-register-handler=true",
 			"--enable-encrypted-token=false",
 			"--enable-pkce=false",
+			"--tls-cert=" + tlsCertificate,
+			"--tls-private-key=" + tlsPrivateKey,
+			"--tls-ca-certificate=" + tlsCaCertificate,
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -281,6 +347,7 @@ var _ = Describe("Code Flow login/logout", func() {
 			func(_ context.Context) {
 				var err error
 				rClient := resty.New()
+				rClient.SetTLSClientConfig(&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13})
 				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK, testUser, testPass)
 				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 				body := resp.Body()
@@ -345,6 +412,7 @@ var _ = Describe("Code Flow login/logout", func() {
 			func(_ context.Context) {
 				var err error
 				rClient := resty.New()
+				rClient.SetTLSClientConfig(&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13})
 				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK, testUser, testPass)
 				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 				body := resp.Body()
@@ -388,6 +456,7 @@ var _ = Describe("Code Flow login/logout", func() {
 			func(_ context.Context) {
 				var err error
 				rClient := resty.New()
+				rClient.SetTLSClientConfig(&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13})
 				reqAddress := proxyAddress + registerURI
 				resp := registerLogin(rClient, reqAddress, http.StatusOK, testRegisterUser, testRegisterPass)
 				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
@@ -459,7 +528,8 @@ var _ = Describe("Code Flow PKCE login/logout", func() {
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
-			"--openid-provider-timeout=120s",
+			"--openid-provider-timeout=300s",
+			"--skip-openid-provider-tls-verify=true",
 			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + pkceTestClient,
 			"--client-secret=" + pkceTestClientSecret,
@@ -472,6 +542,9 @@ var _ = Describe("Code Flow PKCE login/logout", func() {
 			"--enable-pkce=true",
 			"--cookie-pkce-name=" + pkceCookieName,
 			"--enable-encrypted-token=false",
+			"--tls-cert=" + tlsCertificate,
+			"--tls-private-key=" + tlsPrivateKey,
+			"--tls-ca-certificate=" + tlsCaCertificate,
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -485,6 +558,8 @@ var _ = Describe("Code Flow PKCE login/logout", func() {
 			func(_ context.Context) {
 				var err error
 				rClient := resty.New()
+				rClient.SetTLSClientConfig(&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13})
+
 				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK, testUser, testPass)
 				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 
@@ -513,12 +588,13 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 		server := httptest.NewServer(&testsuite_test.FakeUpstreamService{})
 		portNum, err = generateRandomPort()
 		Expect(err).NotTo(HaveOccurred())
-		proxyAddressFirst = "http://127.0.0.1:" + portNum
+		proxyAddressFirst = "https://127.0.0.1:" + portNum
 
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
-			"--openid-provider-timeout=120s",
+			"--openid-provider-timeout=300s",
+			"--skip-openid-provider-tls-verify=true",
 			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + testClient,
 			"--client-secret=" + testClientSecret,
@@ -534,6 +610,9 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 			"--post-logout-redirect-uri=http://google.com",
 			"--enable-encrypted-token=false",
 			"--enable-pkce=false",
+			"--tls-cert=" + tlsCertificate,
+			"--tls-private-key=" + tlsPrivateKey,
+			"--tls-ca-certificate=" + tlsCaCertificate,
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -545,7 +624,8 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 		osArgs = []string{os.Args[0]}
 		proxyArgs = []string{
 			"--discovery-url=" + idpRealmURI,
-			"--openid-provider-timeout=120s",
+			"--openid-provider-timeout=300s",
+			"--skip-openid-provider-tls-verify=true",
 			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + pkceTestClient,
 			"--client-secret=" + pkceTestClientSecret,
@@ -562,6 +642,9 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 			"--enable-id-token-cookie=true",
 			"--post-logout-redirect-uri=http://google.com",
 			"--enable-encrypted-token=false",
+			"--tls-cert=" + tlsCertificate,
+			"--tls-private-key=" + tlsPrivateKey,
+			"--tls-ca-certificate=" + tlsCaCertificate,
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -572,6 +655,7 @@ var _ = Describe("Code Flow login/logout with session check", func() {
 		It("should logout on both successfully", func(_ context.Context) {
 			var err error
 			rClient := resty.New()
+			rClient.SetTLSClientConfig(&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13})
 			resp := codeFlowLogin(rClient, proxyAddressFirst, http.StatusOK, testUser, testPass)
 			Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 			resp = codeFlowLogin(rClient, proxyAddressSec, http.StatusOK, testUser, testPass)
@@ -620,7 +704,8 @@ var _ = Describe("Level Of Authentication Code Flow login/logout", func() {
 		osArgs := []string{os.Args[0]}
 		proxyArgs := []string{
 			"--discovery-url=" + idpRealmURI,
-			"--openid-provider-timeout=120s",
+			"--openid-provider-timeout=300s",
+			"--skip-openid-provider-tls-verify=true",
 			"--listen=" + allInterfaces + portNum,
 			"--client-id=" + loaTestClient,
 			"--client-secret=" + loaTestClientSecret,
@@ -641,6 +726,9 @@ var _ = Describe("Level Of Authentication Code Flow login/logout", func() {
 			"--post-login-redirect-path=" + postLoginRedirectPath,
 			"--enable-encrypted-token=false",
 			"--enable-pkce=false",
+			"--tls-cert=" + tlsCertificate,
+			"--tls-private-key=" + tlsPrivateKey,
+			"--tls-ca-certificate=" + tlsCaCertificate,
 		}
 
 		osArgs = append(osArgs, proxyArgs...)
@@ -655,6 +743,7 @@ var _ = Describe("Level Of Authentication Code Flow login/logout", func() {
 			func(_ context.Context) {
 				var err error
 				rClient := resty.New()
+				rClient.SetTLSClientConfig(&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13})
 				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK, testLoAUser, testLoAPass)
 				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 				body := resp.Body()
@@ -728,6 +817,7 @@ var _ = Describe("Level Of Authentication Code Flow login/logout", func() {
 			func(_ context.Context) {
 				var err error
 				rClient := resty.New()
+				rClient.SetTLSClientConfig(&tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS13})
 				resp := codeFlowLogin(rClient, proxyAddress, http.StatusOK, testLoAUser, testLoAPass)
 				Expect(resp.Header().Get("Proxy-Accepted")).To(Equal("true"))
 				body := resp.Body()
