@@ -10,7 +10,7 @@ jobs:
     # Test the latest release of Go
     strategy:
       matrix:
-        go: ["1.23"]
+        go: ["1.24"]
     steps:
       # Setup the workflow to use the specific version of Go
       - name: Set up Go 1.x
@@ -29,12 +29,52 @@ jobs:
         with:
           cluster-name: "testcluster"
           args: >-
-            -p "8081:80@loadbalancer"
-      - name: "Run Tests"
+            -p "8443:443@loadbalancer"
+      - name: "Deploy keycloak"
         run: |
           k3d kubeconfig merge testcluster --kubeconfig-switch-context
-          KUBECONFIG=~/.k3d/kubeconfig-testcluster.yaml kubectl apply -f ./e2e/k8s/manifest.yml
-          go test -v -race -coverprofile=profile.cov ./...
+          export KUBECONFIG=~/.k3d/kubeconfig-testcluster.yaml
+          kubectl apply -f ./e2e/k8s/manifest.yml
+      - name: "Deploy Redis"
+        run: |
+          sudo apt install -y redis
+
+          REDIS_DIR=/tmp/redis-standalone
+          mkdir -p $REDIS_DIR
+          cp e2e/redis/redis.conf ${REDIS_DIR}/redis.conf
+          cp e2e/redis/{ca.crt,redis.crt,redis.key} $REDIS_DIR
+          pushd $REDIS_DIR
+          redis-server ./redis.conf &
+          popd
+      - name: "Setup Redis Cluster"
+        run: |
+          sudo apt install -y redis
+          PORT_PREFIX=700
+          for NODE_NUM in {0..5}
+          do
+              REDIS_DIR=/tmp/redis-$NODE_NUM
+              mkdir -p $REDIS_DIR
+              cp e2e/redis/redis-cluster.conf ${REDIS_DIR}/redis.conf
+              echo "tls-port ${PORT_PREFIX}${NODE_NUM}" >> ${REDIS_DIR}/redis.conf
+              cp e2e/redis/{ca.crt,redis.crt,redis.key} $REDIS_DIR
+              pushd $REDIS_DIR
+              redis-server ./redis.conf &
+              popd
+          done
+
+          sleep 3
+
+          redis-cli --cluster create 127.0.0.1:${PORT_PREFIX}{0..5} \
+              --cluster-replicas 1 \
+              --cluster-yes \
+              --tls \
+              --cacert e2e/redis/ca.crt \
+              --key e2e/redis/redis.key \
+              --cert e2e/redis/redis.crt \
+              -a 2aD6FgewLV
+      - name: "Run Tests"
+        run: |
+          go test -v -timeout=30m -race -coverprofile=profile.cov ./...
       # Run Go benchmarks
       - name: Benchmark
         run: |
@@ -46,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: ["1.23"]
+        go: ["1.24"]
     steps:
       - uses: actions/setup-go@v5
         with:
@@ -54,10 +94,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: v1.61
-          args: "--out-${NO_FUTURE}format colored-line-number --timeout=3m"
+          version: v2.0.2
+          args: "--timeout=3m"
           github-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Check Golang sources with Aligo
         uses: essentialkaos/aligo-action@v2

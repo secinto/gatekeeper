@@ -24,7 +24,7 @@ jobs:
           curl -Lo $RUNNER_TEMP/sbom-tool https://github.com/microsoft/sbom-tool/releases/download/v1.2.0/sbom-tool-linux-x64
           chmod +x $RUNNER_TEMP/sbom-tool
           $RUNNER_TEMP/sbom-tool generate -b . -bc . -pn $ -pv 1.0.0 -ps "Pavol Ipoth" -nsb https://github.com/gogatekeeper -V Verbose
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: sbom
           path: _manifest/spdx_2.2
@@ -39,7 +39,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23.2"
+          go-version: "1.24.0"
       # Checkout the repository
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,16 +54,59 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.PASSPHRASE }}
       - name: "Create k3d Cluster for E2E testing"
-        uses: AbsaOSS/k3d-action@v1.5.0
+        uses: AbsaOSS/k3d-action@v2.4.0
         with:
           cluster-name: "testcluster"
           args: >-
-            -p "8081:80@loadbalancer"
-      - name: "Run Tests"
+            -p "8443:443@loadbalancer"
+      - name: "Deploy keycloak"
         run: |
           k3d kubeconfig merge testcluster --kubeconfig-switch-context
-          KUBECONFIG=~/.k3d/kubeconfig-testcluster.yaml kubectl apply -f ./e2e/k8s/manifest.yml
-          go test -v -race ./...
+          export KUBECONFIG=~/.k3d/kubeconfig-testcluster.yaml
+          kubectl apply -f ./e2e/k8s/manifest.yml
+      - name: "Deploy Redis"
+        run: |
+          sudo apt install -y redis
+          
+          REDIS_DIR=/tmp/redis-standalone
+          mkdir -p $REDIS_DIR
+          cp e2e/redis/redis.conf ${REDIS_DIR}/redis.conf
+          cp e2e/redis/{ca.crt,redis.crt,redis.key} $REDIS_DIR
+          pushd $REDIS_DIR
+          redis-server ./redis.conf &
+          popd
+      - name: "Setup Redis Cluster"
+        run: |
+          sudo apt install -y redis
+          PORT_PREFIX=700
+          for NODE_NUM in {0..5}
+          do
+              REDIS_DIR=/tmp/redis-$NODE_NUM
+              mkdir -p $REDIS_DIR
+              cp e2e/redis/redis-cluster.conf ${REDIS_DIR}/redis.conf
+              echo "tls-port ${PORT_PREFIX}${NODE_NUM}" >> ${REDIS_DIR}/redis.conf
+              cp e2e/redis/{ca.crt,redis.crt,redis.key} $REDIS_DIR
+              pushd $REDIS_DIR
+              redis-server ./redis.conf &
+              popd
+          done
+
+          sleep 3
+
+          redis-cli --cluster create 127.0.0.1:${PORT_PREFIX}{0..5} \
+              --cluster-replicas 1 \
+              --cluster-yes \
+              --tls \
+              --cacert e2e/redis/ca.crt \
+              --key e2e/redis/redis.key \
+              --cert e2e/redis/redis.crt \
+              -a 2aD6FgewLV
+      - name: "Run Tests"
+        run: |
+          go test -v -timeout=30m -race ./...
+          pkill redis-server
+          sleep 3
+          rm -rf /tmp/redis-*
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v3
         with:
@@ -107,4 +150,22 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+
+      - name: Extract metadata (tags, labels) for Docker FIPS
+        id: meta_fips
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      - name: Build and push Docker FIPS image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          build-args: |
+            FIPS=v1.0.0
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}-fips
+          labels: ${{ steps.meta_fips.outputs.labels }}
           platforms: linux/amd64,linux/arm64,linux/arm/v7

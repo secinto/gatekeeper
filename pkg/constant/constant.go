@@ -112,6 +112,10 @@ const (
 
 	TLS13 = "tlsv1.3"
 	TLS12 = "tlsv1.2"
+
+	TLSRedisScheme = "rediss"
+	RedisScheme    = "redis"
 )
 
+//nolint:gochecknoglobals
 var SignatureAlgs = [3]jose.SignatureAlgorithm{jose.RS256, jose.HS256, jose.HS512}

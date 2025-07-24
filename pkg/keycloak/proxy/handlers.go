@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-
 	"net/http"
 	"net/url"
 	"strings"
@@ -30,7 +29,6 @@ import (
 
 	"github.com/Nerzal/gocloak/v13"
 	oidc3 "github.com/coreos/go-oidc/v3/oidc"
-	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
 	"github.com/gogatekeeper/gatekeeper/pkg/constant"
@@ -53,7 +51,6 @@ import (
 //nolint:cyclop
 func oauthAuthorizationHandler(
 	logger *zap.Logger,
-	skipTokenVerification bool,
 	scopes []string,
 	enablePKCE bool,
 	registrationEnabled bool,
@@ -68,11 +65,6 @@ func oauthAuthorizationHandler(
 	defaultAllowedQueryParams map[string]string,
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(wrt http.ResponseWriter, req *http.Request) {
-		if skipTokenVerification {
-			wrt.WriteHeader(http.StatusNotAcceptable)
-			return
-		}
-
 		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 		if !assertOk {
 			logger.Error(apperrors.ErrAssertionFailed.Error())
@@ -184,7 +176,6 @@ func oauthCallbackHandler(
 	cookieRequestURIName string,
 	postLoginRedirectPath string,
 	encryptionKey string,
-	skipTokenVerification bool,
 	skipAccessTokenClientIDCheck bool,
 	skipAccessTokenIssuerCheck bool,
 	enableRefreshTokens bool,
@@ -205,11 +196,6 @@ func oauthCallbackHandler(
 	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
 ) func(writer http.ResponseWriter, req *http.Request) {
 	return func(writer http.ResponseWriter, req *http.Request) {
-		if skipTokenVerification {
-			writer.WriteHeader(http.StatusNotAcceptable)
-			return
-		}
-
 		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
 		if !assertOk {
 			logger.Error(apperrors.ErrAssertionFailed.Error())
@@ -466,17 +452,19 @@ func loginHandler(
 
 			accessToken := token.AccessToken
 			refreshToken := ""
-			accessTokenObj, err := jwt.ParseSigned(token.AccessToken, []jose.SignatureAlgorithm{jose.RS256})
-			if err != nil {
-				return http.StatusNotImplemented,
-					errors.Join(apperrors.ErrParseAccessToken, err)
-			}
 
-			identity, err := session.ExtractIdentity(accessTokenObj)
+			identity, err := session.ExtractIdentity(token.AccessToken)
 			if err != nil {
 				return http.StatusNotImplemented,
 					errors.Join(apperrors.ErrExtractIdentityFromAccessToken, err)
 			}
+
+			logger.Debug("found the user identity",
+				zap.String("id", identity.ID),
+				zap.String("name", identity.Name),
+				zap.String("email", identity.Email),
+				zap.String("roles", strings.Join(identity.Roles, ",")),
+				zap.String("groups", strings.Join(identity.Groups, ",")))
 
 			writer.Header().Set(constant.HeaderContentType, "application/json")
 			idToken, assertOk := token.Extra("id_token").(string)
@@ -624,7 +612,6 @@ func loginHandler(
 
 			return http.StatusOK, nil
 		}(ctx)
-
 		if err != nil {
 			scope.Logger.Error(err.Error(),
 				zap.String("remote_addr", req.RemoteAddr),
@@ -647,7 +634,6 @@ func logoutHandler(
 	redirectionURL string,
 	discoveryURL string,
 	revocationEndpoint string,
-	cookieAccessName string,
 	cookieIDTokenName string,
 	cookieRefreshName string,
 	clientID string,
@@ -659,8 +645,6 @@ func logoutHandler(
 	store storage.Storage,
 	cookManager *cookie.Manager,
 	httpClient *http.Client,
-	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
-	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(writer http.ResponseWriter, req *http.Request) {
 		// @check if the redirection is there
@@ -669,19 +653,11 @@ func logoutHandler(
 		if postLogoutRedirectURI != "" {
 			redirectURL = postLogoutRedirectURI
 		} else {
-			for k := range req.URL.Query() {
-				if k == "redirect" {
-					redirectURL = req.URL.Query().Get("redirect")
-
-					if redirectURL == "" {
-						// then we can default to redirection url
-						redirectURL = strings.TrimSuffix(
-							redirectionURL,
-							"/oauth/callback",
-						)
-					}
-				}
-			}
+			// then we can default to redirection url
+			redirectURL = strings.TrimSuffix(
+				redirectionURL,
+				"/oauth/callback",
+			)
 		}
 
 		scope, assertOk := req.Context().Value(constant.ContextScopeName).(*models.RequestScope)
@@ -691,17 +667,11 @@ func logoutHandler(
 			return
 		}
 
-		// @step: drop the access token
-		user, err := getIdentity(req, cookieAccessName, "")
-		if err != nil {
-			accessError(writer, req)
-			return
-		}
-
+		// authentication middleware stores user in scope
+		user := scope.Identity
 		// step: can either use the access token or the refresh token
 		identityToken := user.RawToken
 
-		//nolint:vetshadow
 		if refresh, _, err := session.RetrieveRefreshToken(
 			store,
 			cookieRefreshName,

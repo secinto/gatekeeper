@@ -24,6 +24,7 @@ import (
 	"net/http/pprof"
 	"strings"
 
+	oidc3 "github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/gogatekeeper/gatekeeper/pkg/apperrors"
@@ -131,7 +132,6 @@ func RetrieveIDToken(
 	var encrypted string
 
 	token, err = session.GetTokenInCookie(req, cookieIDTokenName)
-
 	if err != nil {
 		return token, "", err
 	}
@@ -158,7 +158,6 @@ func DiscoveryHandler(
 		}
 
 		respBody, err := json.Marshal(resp)
-
 		if err != nil {
 			logger.Error(
 				apperrors.ErrMarshallDiscoveryResp.Error(),
@@ -172,7 +171,6 @@ func DiscoveryHandler(
 		wrt.Header().Set(constant.HeaderContentType, "application/json")
 		wrt.WriteHeader(http.StatusOK)
 		_, err = wrt.Write(respBody)
-
 		if err != nil {
 			logger.Error(
 				apperrors.ErrDiscoveryResponseWrite.Error(),
@@ -182,7 +180,9 @@ func DiscoveryHandler(
 	}
 }
 
-// getRedirectionURL returns the redirectionURL for the oauth flow.
+// GetRedirectionURL returns the redirectionURL for the oauth flow.
+//
+//nolint:cyclop
 func GetRedirectionURL(
 	logger *zap.Logger,
 	redirectionURL string,
@@ -191,6 +191,7 @@ func GetRedirectionURL(
 	secureCookie bool,
 	cookieOAuthStateName string,
 	withOAuthURI func(string) string,
+	noState bool,
 ) func(wrt http.ResponseWriter, req *http.Request) string {
 	return func(wrt http.ResponseWriter, req *http.Request) string {
 		var redirect string
@@ -224,12 +225,14 @@ func GetRedirectionURL(
 			redirect = redirectionURL
 		}
 
-		state, _ := req.Cookie(cookieOAuthStateName)
+		if !noState {
+			state, _ := req.Cookie(cookieOAuthStateName)
 
-		if state != nil && req.URL.Query().Get("state") != state.Value {
-			logger.Error("state parameter mismatch")
-			wrt.WriteHeader(http.StatusForbidden)
-			return ""
+			if state != nil && req.URL.Query().Get("state") != state.Value {
+				logger.Error("state parameter mismatch")
+				wrt.WriteHeader(http.StatusForbidden)
+				return ""
+			}
 		}
 
 		return fmt.Sprintf("%s%s", redirect, withOAuthURI(constant.CallbackURL))
@@ -238,20 +241,56 @@ func GetRedirectionURL(
 
 // ExpirationHandler checks if the token has expired.
 func ExpirationHandler(
-	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
+	logger *zap.Logger,
+	provider *oidc3.Provider,
+	clientID string,
+	skipAccessTokenClientIDCheck bool,
+	skipAccessTokenIssuerCheck bool,
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (string, error),
 	cookieAccessName string,
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(wrt http.ResponseWriter, req *http.Request) {
-		user, err := getIdentity(req, cookieAccessName, "")
+		token, err := getIdentity(req, cookieAccessName, "")
 		if err != nil {
 			wrt.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		if user.IsExpired() {
+		ctx, cancel := context.WithTimeout(
+			req.Context(),
+			constant.DefaultOpenIDProviderTimeout,
+		)
+		defer cancel()
+
+		_, err = utils.VerifyToken(
+			ctx,
+			provider,
+			token,
+			clientID,
+			skipAccessTokenClientIDCheck,
+			skipAccessTokenIssuerCheck,
+		)
+		if err != nil {
+			if strings.Contains(err.Error(), "token is expired") {
+				wrt.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			wrt.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		user, err := session.ExtractIdentity(token)
+		if err != nil {
 			wrt.WriteHeader(http.StatusUnauthorized)
 			return
 		}
+
+		logger.Debug("found the user identity",
+			zap.String("id", user.ID),
+			zap.String("name", user.Name),
+			zap.String("email", user.Email),
+			zap.String("roles", strings.Join(user.Roles, ",")),
+			zap.String("groups", strings.Join(user.Groups, ",")))
 
 		wrt.WriteHeader(http.StatusOK)
 	}
@@ -259,18 +298,18 @@ func ExpirationHandler(
 
 // TokenHandler display access token to screen.
 func TokenHandler(
-	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (*models.UserContext, error),
+	getIdentity func(req *http.Request, tokenCookie string, tokenHeader string) (string, error),
 	cookieAccessName string,
 	accessError func(wrt http.ResponseWriter, req *http.Request) context.Context,
 ) func(wrt http.ResponseWriter, req *http.Request) {
 	return func(wrt http.ResponseWriter, req *http.Request) {
-		user, err := getIdentity(req, cookieAccessName, "")
+		rawToken, err := getIdentity(req, cookieAccessName, "")
 		if err != nil {
 			accessError(wrt, req)
 			return
 		}
 
-		token, err := jwt.ParseSigned(user.RawToken, constant.SignatureAlgs[:])
+		token, err := jwt.ParseSigned(rawToken, constant.SignatureAlgs[:])
 		if err != nil {
 			accessError(wrt, req)
 			return

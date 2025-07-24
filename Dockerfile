@@ -4,12 +4,13 @@ ARG HOMEDIR=/opt/gatekeeper
 # Builder
 #
 
-FROM --platform=$BUILDPLATFORM golang:1.23.2 AS build-env
+FROM --platform=$BUILDPLATFORM golang:1.24 AS build-env
 ARG HOMEDIR
 ARG TARGETOS TARGETARCH
+ARG FIPS
 ENV GOOS=$TARGETOS
 ENV GOARCH=$TARGETARCH
-
+ENV GOFIPS140=$FIPS
 ADD . /src/
 WORKDIR /src/
 
